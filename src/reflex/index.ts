@@ -1,0 +1,10 @@
+export { PULSE_MILLIS } from '../core/reflex.ts';
+export type { Behaviour, BehaviourDefinition, BehaviourStatus, Expr, Literal, RefPath, ReflexContext, ReflexEngine, ReflexEngineState, Rule, RuleAction, ValidationResult } from '../core/reflex.ts';
+export { validateExpr, validateRule, resolveRef, evaluate } from './dsl.ts';
+export { createReflexEngine } from './engine.ts';
+export { chebyshev, adjacent, stepAwayFrom, towards } from './geometry.ts';
+export { planRuleAction } from './ruleActions.ts';
+export type { RuleActionContext, RuleActionEngineOps } from './ruleActions.ts';
+export * from './behaviours/index.ts';
+export { makeSnapshot, FakeView, FakeContext, makeEvent } from './testing.ts';
+export type { SnapshotOverrides } from './testing.ts';

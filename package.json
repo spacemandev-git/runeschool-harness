@@ -1,0 +1,45 @@
+{
+  "name": "@runeschool/harness",
+  "version": "0.1.0",
+  "description": "A source-first, adapter-driven runtime for coordinating LLM agents in simulated worlds.",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spacemandev-git/runeschool-harness.git"
+  },
+  "imports": {
+    "#protocol": "./src/protocol.ts",
+    "#world": "./src/world.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core/index.ts",
+    "./models": "./src/models/index.ts",
+    "./memory": "./src/memory/index.ts",
+    "./mind": "./src/mind/index.ts",
+    "./reflex": "./src/reflex/index.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./control": "./src/control/index.ts",
+    "./director": "./src/director/index.ts",
+    "./tui": "./src/tui/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "check": "bun run typecheck && bun test"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.5.9"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "packageManager": "bun@1.3.14"
+}

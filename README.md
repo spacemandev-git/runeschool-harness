@@ -1,0 +1,112 @@
+# RuneSchool Harness
+
+RuneSchool Harness is a source-first TypeScript toolkit for coordinating LLM agents in simulated
+worlds. It provides model routing, per-agent minds and memory, deterministic reflexes, team
+coordination, a local control plane, JSONL traces, and a terminal cockpit. A host application
+supplies the world adapter and its command set.
+
+This repository is the reusable harness extracted from RuneSchool. It deliberately contains no
+game server, proprietary scenarios or prompts, production data, cloud deployment configuration, or
+live credentials.
+
+## Status
+
+This is an early `0.1.x` extraction intended for source-based consumption with Bun. Its public API
+will evolve while the adapter boundary is exercised outside the original application. The package
+is marked `private` so it cannot be published to npm accidentally; that does not restrict use of the
+public GitHub repository.
+
+## What is included
+
+- Adapter-neutral world, command, event, and runtime contracts
+- OpenAI-compatible and deterministic mock model providers
+- Per-agent wake policy, context compaction, tools, and SQLite memory
+- Validated declarative reflex rules and deterministic behaviours
+- Director and coordinator loops
+- Local Unix-socket control server/client and OpenTUI cockpit
+- Secret-redacted, owner-only JSONL tracing
+- Fake world/runtime helpers and a comprehensive test suite
+
+The old authored-JavaScript tool is intentionally not included. Models can select only command
+names advertised by the host adapter; the harness does not evaluate model-generated code.
+
+## Requirements
+
+- [Bun](https://bun.sh/) 1.3 or newer
+
+```sh
+git clone https://github.com/spacemandev-git/runeschool-harness.git
+cd runeschool-harness
+bun install --frozen-lockfile
+bun run check
+```
+
+`bun run check` runs strict TypeScript checking and the full test suite.
+
+## Adapter boundary
+
+A host owns authentication, transport, and the source of world truth. It implements `WorldAdapter`
+and supplies `WorldView`, `ActionSink`, and the set of commands that an agent may call:
+
+```ts
+import type { ActionSink, WorldAdapter, WorldView } from '@runeschool/harness';
+
+const adapter: WorldAdapter = {
+  id: 'my-simulation',
+  commandTypes: ['walk', 'inspect', 'recover'],
+  createView(agentId, credentials): WorldView {
+    return connectReadOnlyView(agentId, credentials);
+  }
+};
+
+const sink: ActionSink = {
+  async submit(intent) {
+    return sendValidatedCommand(intent);
+  }
+};
+```
+
+The adapter remains responsible for authorization and server-side command validation. Treat the
+LLM, prompts, memory, tool arguments, events, and other agents as untrusted input.
+
+Useful entry points are:
+
+- `@runeschool/harness/core` — public contracts
+- `@runeschool/harness/models` — model config and providers
+- `@runeschool/harness/memory` — SQLite memory
+- `@runeschool/harness/mind` — agent deliberation loop
+- `@runeschool/harness/reflex` — validated rules and behaviours
+- `@runeschool/harness/control` — local control plane
+- `@runeschool/harness/director` — multi-agent coordination
+- `@runeschool/harness/tui` — terminal cockpit and fake runtime
+- `@runeschool/harness/testing` — test helpers
+
+## Model credentials
+
+Copy `.env.example` only as a reference. Do not commit `.env` files. API keys are named by
+environment variable in configuration and resolved at runtime:
+
+```json
+{
+  "providers": {
+    "provider": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://provider.example/v1",
+      "apiKeyEnv": "PROVIDER_API_KEY"
+    }
+  }
+}
+```
+
+Literal credential-shaped headers are rejected. For providers that require a custom auth header,
+use `headerEnv`, for example `{ "x-api-key": "PROVIDER_API_KEY" }`.
+
+## Repository boundaries
+
+Generated traces, databases, agent memory, control sockets, logs, build output, editor state, and
+all `.env*` files except `.env.example` are ignored. CI runs tests plus a full-history secret scan.
+See [SECURITY.md](SECURITY.md) before connecting the harness to a real service.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
