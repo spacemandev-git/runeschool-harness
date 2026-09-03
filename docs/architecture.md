@@ -61,7 +61,9 @@ actor WebSocket link ──> claim actor token
 
 The join endpoint mints or reuses one actor per public key and assigns its tag and spawn tile.
 Consequently `spawn_agent` works without `tag` or `spawn` in this world and never calls MCP
-`add_player`. The hosted world has no admin token, so admin world-edit operations are unavailable.
+`add_player`. Requested `spawn.at`, `spawn.stats`, `spawn.inventory`, and `spawn.equipment` fields
+are ignored there, and the director tool reports them in its `ignored` result. The hosted world has
+no admin token, so admin world-edit operations are unavailable.
 
 Each agent owns an actor link. The link opens the instance WebSocket, claims the actor with its
 token, subscribes to events, rate-limits commands, and matches acknowledgements to pending actions.

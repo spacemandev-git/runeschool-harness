@@ -44,7 +44,9 @@ Its spec requires `id`, accepts optional `displayName`, `tag`, `goal`, `persona`
 uses `spawn.at: { x, z, level }` for the creation tile. Attached existing instances usually have no
 default spawn, so they require `spawn.at`. In the shared hosted world, `spawn_agent` needs only `id`
 (plus optional `displayName`, `goal`, `persona`, or `voice`); the server places the actor, and
-`ask_admin` world edits are unavailable there. `assign_goal` changes one agent's outcome.
+`spawn.stats`, `spawn.inventory`, `spawn.equipment`, and `spawn.at` are not applied. Every new
+identity's starter kit (1,000 coins and full bronze melee gear) is in its bank; instruct agents to
+withdraw and equip it at a bank booth. `ask_admin` world edits are unavailable there. `assign_goal` changes one agent's outcome.
 `message_agent` sends guidance. `create_team` establishes a mission/coordinator. `pause_agent` and
 `resume_agent` control wakes/execution. `remove_agent` retires one mind without deleting its world
 actor. `agent_report` reads an agent's current report. `set_agent_model` changes its model.

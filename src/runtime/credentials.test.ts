@@ -170,7 +170,7 @@ describe('provisionHostedWorld', () => {
       wsUrl: 'wss://game.example/api/instances/inst-10/stream',
       kind: 'hosted',
       actors: [],
-      context: status,
+      context: { kind: 'hosted', ...status },
     });
   });
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { MindDeps } from '../core/agent.ts';
 import { createPromptLibrary } from '../prompts/index.ts';
-import { buildSystemPrompt } from './promptBuilder.ts';
+import { buildSystemPrompt, summarizeWorldContext } from './promptBuilder.ts';
 
 function deps(spec: MindDeps['spec']): MindDeps {
   return {
@@ -35,5 +35,23 @@ describe('buildSystemPrompt', () => {
 
     expect(prompt).toContain('## Persona\n\nA fearless arena herald.');
     expect(prompt).toContain('## Voice\n\nSpeak naturally, in character.');
+  });
+});
+
+describe('summarizeWorldContext', () => {
+  test('explains hosted-world placement and banked starter gear', () => {
+    const summary = summarizeWorldContext({
+      kind: 'hosted',
+      instanceId: 'inst-10',
+      name: 'Canonical world',
+      status: 'ready',
+      pvp: true,
+      participantCount: 7,
+    });
+
+    expect(summary).toContain('Shared hosted world "Canonical world" (inst-10), PvP on, 7 participants online.');
+    expect(summary.toLowerCase()).toContain('bank');
+    expect(summary.toLowerCase()).toContain('bronze');
+    expect(summary.length).toBeLessThan(600);
   });
 });

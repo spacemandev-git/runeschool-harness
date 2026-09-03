@@ -66,12 +66,23 @@ function sandboxSummary(root: Readonly<Record<string, JsonValue>>): string | und
   return `Sandbox region: ${regionName ?? 'unknown'}${regionId === undefined ? '' : ` (id ${regionId})`}${at === undefined ? '' : ` · spawn ${at}`}`;
 }
 
+function hostedSummary(root: Readonly<Record<string, JsonValue>>): string {
+  const name = text(root.name) ?? 'unnamed';
+  const instanceId = text(root.instanceId) ?? 'unknown instance';
+  const pvp = root.pvp === true ? 'on' : 'off';
+  const participants = typeof root.participantCount === 'number'
+    ? `, ${root.participantCount} participants online`
+    : '';
+  return `Shared hosted world "${name}" (${instanceId}), PvP ${pvp}${participants}. You joined with a wallet identity; the server chose your spawn. Your starter kit (1,000 coins and full bronze melee gear: full helm, platebody, platelegs, kiteshield, sword, dagger, axe) is in your BANK, not equipped: go to a bank booth, bank-withdraw the pieces, then equip them.`;
+}
+
 export function summarizeWorldContext(value: JsonValue): string {
   const root = record(value);
   const kind = root === undefined ? undefined : text(root.kind);
   const preferred = root === undefined ? undefined
     : kind === 'sandbox' ? sandboxSummary(root)
       : kind === 'scenario' ? scenarioSummary(root)
+        : kind === 'hosted' ? hostedSummary(root)
         : scenarioSummary(root) ?? sandboxSummary(root);
   const summary = preferred ?? JSON.stringify(value);
   return summary.length <= 600 ? summary : `${summary.slice(0, 599)}…`;

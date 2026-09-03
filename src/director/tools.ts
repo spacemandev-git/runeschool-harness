@@ -223,9 +223,26 @@ export function createHarnessTools(runtime: RuntimeInternals, bus: HarnessBus, m
   };
   return [
     tool('list_agents', 'List current harness agents.', schema({}), async () => json(runtime.view.agents())),
-    tool('spawn_agent', 'Spawn an agent into the currently connected world; no instance id is needed. spawn.at is a { x, z, level } tile, and tag defaults to id. In the shared hosted world, the server assigns the tag and spawn tile, so both fields are ignored.', SPAWN_AGENT_PARAMETERS, async (args) => {
+    tool('spawn_agent', 'Spawn an agent into the currently connected world; no instance id is needed. spawn.at is a { x, z, level } tile, and tag defaults to id. In the shared hosted world, the server assigns the tag and spawn tile, so both fields are ignored. Requested gear and stats are not applied there, and the result lists ignored fields.', SPAWN_AGENT_PARAMETERS, async (args): Promise<JsonValue> => {
       const spec = validateAgentSpec(args.spec);
       await runtime.commands.spawnAgent(spec);
+      if (runtime.view.instance?.kind === 'hosted') {
+        const ignored = [
+          ...(spec.spawn?.at === undefined ? [] : ['spawn.at']),
+          ...(spec.spawn?.stats === undefined ? [] : ['spawn.stats']),
+          ...(spec.spawn?.inventory === undefined ? [] : ['spawn.inventory']),
+          ...(spec.spawn?.equipment === undefined ? [] : ['spawn.equipment']),
+          ...(spec.tag === undefined ? [] : ['tag']),
+        ];
+        if (ignored.length > 0) {
+          return {
+            ok: true,
+            agent: spec.id,
+            ignored,
+            note: "The shared hosted world places the actor and cannot apply requested gear, stats, or tile; each identity's starter kit (1,000 coins and full bronze melee gear) is in its bank, so message the agent to withdraw and equip it at a bank booth.",
+          };
+        }
+      }
       return { ok: true, agent: spec.id };
     }),
     ...(runtime.commands.removeAgent === undefined ? [] : [

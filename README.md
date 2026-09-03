@@ -120,9 +120,12 @@ Each harness agent signs in with its own Ed25519 identity. Private identity file
 reuses the same actor. Delete one agent's identity file when you intentionally want a fresh wallet
 and actor for that agent.
 
-The server assigns the actor's `wallet-…` tag and spawn tile, so configured `tag` and `spawn`
-values are ignored. It also grants each new identity a one-time starter kit in the actor's bank.
-No admin token is needed to join, but the admin persona cannot make world edits in this world.
+The server assigns the actor's `wallet-…` tag and spawn tile, so requested tags, spawn gear, stats,
+and tiles are ignored; the director's `spawn_agent` result reports each such request under `ignored`.
+Each new identity receives a one-time starter kit—1,000 coins and full bronze melee gear—in the
+actor's bank, not equipped. The director should tell the agent to visit a bank booth, withdraw the
+pieces with `bank-withdraw`, and equip them. No admin token is needed to join, but the admin persona
+cannot make world edits in this world.
 
 Use `/model director <model>`, `/model agent-default <model>`, `/model coordinator <team> <model>`,
 or `/model agent <agent> <model>` to change live model assignments. `/stop` stops the runtime and

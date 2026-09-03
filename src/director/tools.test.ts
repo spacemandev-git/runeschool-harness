@@ -4,9 +4,10 @@ import type { AgentSpec, RuntimeCommands, RuntimeView } from '../core/index.ts';
 import { createMailboxes } from '../runtime/mailbox.ts';
 import { createHarnessTools, validateAgentSpec } from './tools.ts';
 
-function view(privateGoal = false): RuntimeView {
+function view(privateGoal = false, instance?: RuntimeView['instance']): RuntimeView {
   return {
     runId: 'run-test', startedAt: 0,
+    ...(instance === undefined ? {} : { instance }),
     agents: () => [{
       id: 'hero', displayName: 'Hero', tag: 'hero', entity: 1, state: 'idle',
       goal: privateGoal ? '(private)' : 'win', ...(privateGoal ? { privateGoal: true } : {}),
@@ -68,6 +69,7 @@ describe('director harness tools', () => {
     expect(spawn.definition.description).toContain('currently connected world');
     expect(spawn.definition.description).toContain('tag defaults to id');
     expect(spawn.definition.description).toContain('shared hosted world');
+    expect(spawn.definition.description).toContain('result lists ignored fields');
     const spec = parameters.properties.spec.properties as unknown as {
       tag: { description: string };
       spawn: { properties: { at: { description: string } } };
@@ -101,6 +103,62 @@ describe('director harness tools', () => {
       spec: { id: 'bob', spawn: { x: 3221, z: 3218, level: 0 } }
     });
     expect(spawned).toEqual([{ id: 'bob', spawn: { at: { x: 3221, z: 3218, level: 0 } } }]);
+  });
+
+  test('spawn_agent reports ignored hosted placement and equipment requests', async () => {
+    const calls = { pauses: [] as unknown[][], removed: new Set<string>() };
+    const hosted = {
+      id: 'inst-10', httpUrl: 'https://x/instances/inst-10', kind: 'hosted', tick: 1,
+    };
+    const runtime = {
+      view: view(false, hosted), commands: commands(calls), async createTeam() {}, watchUrl: () => undefined,
+    };
+    const tools = createHarnessTools(runtime, createBus(), createMailboxes(createBus()));
+    const result = await tools.find((tool) => tool.definition.name === 'spawn_agent')!.run({
+      spec: {
+        id: 'bob',
+        spawn: {
+          at: { x: 3221, z: 3218, level: 0 },
+          equipment: [{ item: 1277 }],
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      agent: 'bob',
+      ignored: ['spawn.at', 'spawn.equipment'],
+      note: expect.stringContaining('bank'),
+    });
+  });
+
+  test('spawn_agent keeps its exact success result in a hosted world without ignored fields', async () => {
+    const calls = { pauses: [] as unknown[][], removed: new Set<string>() };
+    const hosted = {
+      id: 'inst-10', httpUrl: 'https://x/instances/inst-10', kind: 'hosted', tick: 1,
+    };
+    const runtime = {
+      view: view(false, hosted), commands: commands(calls), async createTeam() {}, watchUrl: () => undefined,
+    };
+    const tools = createHarnessTools(runtime, createBus(), createMailboxes(createBus()));
+
+    expect(await tools.find((tool) => tool.definition.name === 'spawn_agent')!.run({ spec: { id: 'bob' } }))
+      .toEqual({ ok: true, agent: 'bob' });
+  });
+
+  test('spawn_agent keeps its exact success result for non-hosted spawn requests', async () => {
+    const calls = { pauses: [] as unknown[][], removed: new Set<string>() };
+    const sandbox = {
+      id: 'inst-10', httpUrl: 'https://x/instances/inst-10', kind: 'sandbox', tick: 1,
+    };
+    const runtime = {
+      view: view(false, sandbox), commands: commands(calls), async createTeam() {}, watchUrl: () => undefined,
+    };
+    const tools = createHarnessTools(runtime, createBus(), createMailboxes(createBus()));
+
+    expect(await tools.find((tool) => tool.definition.name === 'spawn_agent')!.run({
+      spec: { id: 'bob', spawn: { equipment: [{ item: 1277 }] } },
+    })).toEqual({ ok: true, agent: 'bob' });
   });
 
   test('unknown agent errors list known agents and direct admin requests to ask_admin', async () => {

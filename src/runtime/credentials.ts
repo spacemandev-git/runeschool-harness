@@ -84,6 +84,6 @@ export async function provisionHostedWorld(client: HostedWorldClient, backendUrl
     wsUrl: websocketUrl(httpUrl),
     kind: 'hosted',
     actors: [],
-    context: JSON.parse(JSON.stringify(status)) as JsonValue,
+    context: { kind: 'hosted', ...status } as JsonValue,
   };
 }
