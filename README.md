@@ -43,26 +43,38 @@ bun run check
 
 `bun run check` runs strict TypeScript checking and the full test suite.
 
+## Launch the cockpit
+
+From the repository root, launch the terminal cockpit with its bundled deterministic fake runtime:
+
+```sh
+bun run cockpit
+```
+
+The demo does not require model credentials or a RuneSchool backend. Press `?` to open the full
+key and command reference. To stop the demo and exit, press `q` twice or `Ctrl+C` twice within two
+seconds.
+
 ## Adapter boundary
 
 A host owns authentication, transport, and the source of world truth. It implements `WorldAdapter`
 and supplies `WorldView`, `ActionSink`, and the set of commands that an agent may call:
 
 ```ts
-import type { ActionSink, WorldAdapter, WorldView } from '@runeschool/harness';
+import type { ActionSink, WorldAdapter, WorldView } from "@runeschool/harness";
 
 const adapter: WorldAdapter = {
-  id: 'my-simulation',
-  commandTypes: ['walk', 'inspect', 'recover'],
+  id: "my-simulation",
+  commandTypes: ["walk", "inspect", "recover"],
   createView(agentId, credentials): WorldView {
     return connectReadOnlyView(agentId, credentials);
-  }
+  },
 };
 
 const sink: ActionSink = {
   async submit(intent) {
     return sendValidatedCommand(intent);
-  }
+  },
 };
 ```
 
@@ -90,7 +102,7 @@ automatically; other hosts can inject the same variables through their secret ma
 ```dotenv
 ROUTER_API_BASE=https://your-router.example/v1
 ROUTER_API_KEY=replace-with-your-router-key
-ROUTER_MODEL=openai/gpt-5.5-pro
+ROUTER_MODEL=openai/gpt-5.6-sol
 RUNESCHOOL_API_BACKEND=http://127.0.0.1:7800
 ```
 
@@ -100,7 +112,7 @@ never included in displayable runtime config. A host can read the non-secret end
 including the RuneSchool server base URL, with:
 
 ```ts
-import { loadHarnessEnvironment } from '@runeschool/harness/environment';
+import { loadHarnessEnvironment } from "@runeschool/harness/environment";
 
 const { runeschoolApiBackend } = loadHarnessEnvironment();
 ```
@@ -136,13 +148,13 @@ model calls and can be made independently for the director, each team coordinato
 A host wires the cockpit command to its model registry with `applyModelSelection`:
 
 ```ts
-import { applyModelSelection } from '@runeschool/harness/models';
+import { applyModelSelection } from "@runeschool/harness/models";
 
 const commands = {
   // ...the rest of RuntimeCommands
   setModel(selection) {
     applyModelSelection(models, selection);
-  }
+  },
 };
 ```
 
