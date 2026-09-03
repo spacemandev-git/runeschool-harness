@@ -4,6 +4,7 @@ import { createBus } from '../bus/index.ts';
 import { createCockpit } from './app.ts';
 import { HELP_TEXT } from './keymap.ts';
 import { createFakeRuntime } from './fake/fakeRuntime.ts';
+import type { WorldDirectory } from './worldDirectory.ts';
 
 process.env.XDG_DATA_HOME = '/tmp/opentui-cockpit-tests';
 
@@ -168,4 +169,45 @@ test('help text lists lifecycle and model-selection commands', () => {
   expect(HELP_TEXT).toContain('/model director <model>');
   expect(HELP_TEXT).toContain('/model coordinator <team> <model>');
   expect(HELP_TEXT).toContain('/model agent <agent> <model>');
+  expect(HELP_TEXT).toContain('/world connect <instance>');
+  expect(HELP_TEXT).toContain('/world scenario <scenario>');
+});
+
+test('World lists backend instances and connects or spawns the selected row', async () => {
+  const setup = await createTestRenderer({ width: 120, height: 40 });
+  const bus = createBus();
+  const fake = createFakeRuntime(bus);
+  const connected: string[] = [];
+  const summary = (id: string, kind: string) => ({
+    id, kind, tick: 10, state: 'running', entityCount: 4, realtime: true, pvp: false,
+  });
+  const directory: WorldDirectory = {
+    backendUrl: 'https://game.example',
+    async listInstances() { return [summary('inst-live', 'sandbox')]; },
+    async listScenarios() { return [{ id: 'goblin-ambush', name: 'Goblin Ambush', description: 'Defend the town.' }]; },
+    async connect(id) { return summary(id, 'sandbox'); },
+    async spawnScenario() { return summary('inst-new', 'scenario'); },
+    async spawnSandbox() { return summary('inst-sandbox', 'sandbox'); },
+    async close() {},
+  };
+  const cockpit = createCockpit({
+    view: fake.view, commands: fake.commands, bus, renderer: setup.renderer,
+    worldDirectory: directory, onWorldConnect(instance) { connected.push(instance.id); },
+  });
+  cockpit.selectTab('World');
+  const running = cockpit.start();
+  await setup.waitForFrame((frame) => frame.includes('inst-live') && frame.includes('Goblin Ambush'));
+
+  setup.mockInput.pressTab({ shift: true });
+  setup.mockInput.pressEnter();
+  await Bun.sleep(20);
+  expect(connected).toEqual(['inst-live']);
+
+  setup.mockInput.pressArrow('down');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(20);
+  expect(connected).toEqual(['inst-live', 'inst-new']);
+
+  await cockpit.stop();
+  await running;
 });

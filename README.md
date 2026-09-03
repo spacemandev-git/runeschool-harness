@@ -45,15 +45,30 @@ bun run check
 
 ## Launch the cockpit
 
-From the repository root, launch the terminal cockpit with its bundled deterministic fake runtime:
+From the repository root, launch the terminal cockpit:
 
 ```sh
 bun run cockpit
 ```
 
-The demo does not require model credentials or a RuneSchool backend. Press `?` to open the full
-key and command reference. To stop the demo and exit, press `q` twice or `Ctrl+C` twice within two
-seconds.
+The cockpit reads `RUNESCHOOL_API_BACKEND` from `.env`, opens on the World tab, and queries that
+backend for running instances and saved scenarios. Select a running instance and press `Enter` to
+connect, or select a `+` scenario entry and press `Enter` to spawn and connect to a new instance.
+If the backend is unavailable, the World tab displays the connection error; it does not fall back
+to fake data. Press `r` to retry.
+
+The same actions are available from the footer:
+
+```text
+/world refresh
+/world connect inst-10
+/world scenario goblin-ambush
+/world sandbox {"name":"training","regions":[12850],"players":[{"tag":"hero"}]}
+```
+
+Custom sandbox JSON is passed to the backend's `create_sandbox_world` tool and must satisfy its
+schema. Press `?` to open the full key and command reference. To exit, press `q` twice or `Ctrl+C`
+twice within two seconds.
 
 ## Adapter boundary
 

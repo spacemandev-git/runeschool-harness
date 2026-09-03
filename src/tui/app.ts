@@ -8,9 +8,11 @@ import {
   type CliRenderer,
   type KeyEvent,
 } from '@opentui/core';
+import type { JsonValue } from '#protocol';
 import type { AgentSpec } from '../core/agent.ts';
 import type { HarnessBus } from '../core/bus.ts';
 import type { RuntimeCommands, RuntimeView } from '../core/runtime.ts';
+import type { BackendInstanceSummary, WorldDirectory } from './worldDirectory.ts';
 import { createAdminScreen } from './screens/admin.ts';
 import { createAgentScreen } from './screens/agent.ts';
 import { createAgentsScreen } from './screens/agents.ts';
@@ -31,6 +33,8 @@ export interface CockpitOptions {
   readonly attached?: boolean;
   readonly onDetach?: () => void;
   readonly statusHint?: string;
+  readonly worldDirectory?: WorldDirectory;
+  readonly onWorldConnect?: (instance: BackendInstanceSummary) => void | Promise<void>;
 }
 
 export interface Cockpit {
@@ -110,7 +114,10 @@ export function createCockpit(options: CockpitOptions): Cockpit {
       const agentScreen = createAgentScreen(activeRenderer, options.view, options.bus);
       const firstAgent = requestedAgent ?? options.view.agents()[0]?.id;
       if (firstAgent !== undefined) agentScreen.setAgent(firstAgent);
-      const worldScreen = createWorldScreen(activeRenderer, options.view);
+      const worldScreen = createWorldScreen(activeRenderer, options.view, {
+        ...(options.worldDirectory === undefined ? {} : { directory: options.worldDirectory }),
+        ...(options.onWorldConnect === undefined ? {} : { onConnect: options.onWorldConnect }),
+      });
       const traceScreen = createTraceScreen(activeRenderer, options.bus);
       const helpScreen = createHelpScreen(activeRenderer);
       const screens: readonly Screen[] = [directorScreen, adminScreen, agentsScreen, agentScreen, worldScreen, traceScreen, helpScreen];
@@ -125,7 +132,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
       footer.onContentChange = () => {
         if (selectedTab !== 5) return;
         const value = footer.plainText.trim();
-        const isCommand = /^\/(admin|goal|say|pause|resume|cmd|spawn|model|stop|quit|detach|help)(\s|$)/.test(value);
+        const isCommand = /^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|stop|quit|detach|help)(\s|$)/.test(value);
         if (value === '') traceScreen.setFilter('');
         else if (value.startsWith('/') && !isCommand) traceScreen.setFilter(value);
       };
@@ -145,7 +152,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         else if (selectedTab === 1) footer.placeholder = 'Tell the admin what to change in the world…';
         else if (selectedTab === 3) footer.placeholder = `message ${selectedAgentId() ?? 'agent'}…`;
         else if (selectedTab === 5) footer.placeholder = '/prefix to filter, or enter a command…';
-        else footer.placeholder = 'enter /model, /goal, /say, /pause, /resume, /cmd, /spawn, /stop, /quit, /detach, or /help…';
+        else footer.placeholder = 'enter /world, /model, /goal, /say, /pause, /resume, /cmd, /spawn, /stop, /quit, /detach, or /help…';
       }
 
       function showScreen(): void {
@@ -227,6 +234,36 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         if (/^\/model(\s|$)/.test(text)) {
           throw new Error('usage: /model director <model> | /model coordinator <team> <model> | /model agent <agent> <model>');
         }
+        if (text === '/world refresh') {
+          await worldScreen.refreshRemote();
+          status.setHint('backend worlds refreshed');
+          return;
+        }
+        const connectWorld = text.match(/^\/world\s+connect\s+(\S+)$/);
+        if (connectWorld?.[1] !== undefined) {
+          const instance = await worldScreen.connect(connectWorld[1]);
+          status.setHint(`connected to ${instance.id}`);
+          selectTabIndex(4);
+          return;
+        }
+        const scenarioWorld = text.match(/^\/world\s+scenario\s+(\S+)$/);
+        if (scenarioWorld?.[1] !== undefined) {
+          const instance = await worldScreen.spawnScenario(scenarioWorld[1]);
+          status.setHint(`spawned and connected to ${instance.id}`);
+          selectTabIndex(4);
+          return;
+        }
+        const sandboxWorld = text.match(/^\/world\s+sandbox\s+([\s\S]+)$/);
+        if (sandboxWorld?.[1] !== undefined) {
+          const request = parseObject(sandboxWorld[1]) as Readonly<Record<string, JsonValue>>;
+          const instance = await worldScreen.spawnSandbox(request);
+          status.setHint(`spawned and connected to ${instance.id}`);
+          selectTabIndex(4);
+          return;
+        }
+        if (/^\/world(\s|$)/.test(text)) {
+          throw new Error('usage: /world refresh | /world connect <instance> | /world scenario <scenario> | /world sandbox <json>');
+        }
         if (text === '/stop') { await options.commands.stop('operator'); return; }
         if (text === '/quit') {
           await options.commands.stop('operator');
@@ -247,14 +284,14 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         const text = footer.plainText.trim();
         if (text.length === 0) return;
         footer.setText('');
-        if (/^\/(admin|goal|say|pause|resume|cmd|spawn|model|stop|quit|detach|help)(\s|$)/.test(text)) await runCommand(() => consoleCommand(text));
+        if (/^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|stop|quit|detach|help)(\s|$)/.test(text)) await runCommand(() => consoleCommand(text));
         else if (selectedTab === 0) await runCommand(() => options.commands.directorSay(text));
         else if (selectedTab === 1) await runCommand(() => options.commands.adminSay(text));
         else if (selectedTab === 3) {
           const id = selectedAgentId();
           if (id === undefined) status.setError('no agent selected');
           else await runCommand(() => options.commands.agentSay(id, text));
-        } else if (selectedTab === 5 && text.startsWith('/') && !/^\/(admin|goal|say|pause|resume|cmd|spawn|model|stop|quit|detach|help)(\s|$)/.test(text)) {
+        } else if (selectedTab === 5 && text.startsWith('/') && !/^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|stop|quit|detach|help)(\s|$)/.test(text)) {
           traceScreen.setFilter(text);
           status.setError(undefined);
           status.setHint(`trace filter /${traceScreen.filter()}`);
@@ -355,6 +392,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         directorScreen.dispose();
         adminScreen.dispose();
         agentScreen.dispose();
+        worldScreen.dispose();
         traceScreen.dispose();
         if (root.parent !== null) activeRenderer.root.remove(root);
       };
