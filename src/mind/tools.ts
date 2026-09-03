@@ -6,7 +6,7 @@ import type { ToolDefinition } from '../core/model.ts';
 import type { PromptName } from '../core/prompts.ts';
 import type { ReflexEngineState, Rule } from '../core/reflex.ts';
 import { PULSE_MILLIS } from '../core/reflex.ts';
-import { renderDeltaLines, renderSnapshot } from '../format.ts';
+import { renderDeltaLines, renderSnapshot, type NameLookup } from '../perception/summarizer.ts';
 
 export interface AgentTool {
   readonly definition: ToolDefinition;
@@ -143,6 +143,7 @@ export function compactReflexText(state: ReflexEngineState): string {
 }
 
 export function createAgentTools(deps: MindDeps, ctx: AgentToolContext): readonly AgentTool[] {
+  const nameOf: NameLookup = (kind, id) => deps.view.nameOf(kind, id);
   let fallbackCheckpoint: number | undefined;
   const tools: AgentTool[] = [];
   const add = (tool: AgentTool): void => { tools.push(tool); };
@@ -196,7 +197,7 @@ export function createAgentTools(deps: MindDeps, ctx: AgentToolContext): readonl
     const checkpoint = ctx.getWakeCheckpoint?.() ?? fallbackCheckpoint ?? deps.view.checkpoint();
     await new Promise<void>((resolve) => setTimeout(resolve, (ticks as number) * (deps.pulseMs ?? PULSE_MILLIS)));
     const snapshot = deps.view.snapshot();
-    const lines = renderDeltaLines(deps.view.deltaSince(checkpoint), (kind, id) => deps.view.nameOf(kind, id));
+    const lines = renderDeltaLines(deps.view.deltaSince(checkpoint), nameOf);
     const next = deps.view.checkpoint();
     fallbackCheckpoint = next;
     ctx.setWakeCheckpoint?.(next);

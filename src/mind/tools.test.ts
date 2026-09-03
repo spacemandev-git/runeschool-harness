@@ -72,13 +72,25 @@ describe('agent tools', () => {
     expect(await fixture.run('send_message', { to: 'coordinator', text: 'ready' })).toMatchObject({ to: 'coordinator:red' });
     expect(await fixture.run('report', { text: 'milestone' })).toMatchObject({ to: 'coordinator:red' });
     expect(fixture.rows[0]).toMatchObject({ kind: 'episodic', importance: 0.6 });
-    expect(await fixture.run('guide', { name: 'commands' })).toContain('Commands');
+    expect(await fixture.run('guide', { name: 'social-games' })).toContain('# Social games');
     expect(await fixture.run('guide', { name: 'agent-system' })).toHaveProperty('error');
     expect(await fixture.run('mcp_names', { q: 'x' })).toEqual({ args: { q: 'x' } });
     expect(await fixture.run('sleep', { reason: 'quiet' })).toMatchObject({ sleeping: true });
     expect(fixture.slept).toBe(true);
     expect(await fixture.run('finish', { success: true, summary: 'done' })).toMatchObject({ finished: true });
     expect(fixture.finished).toEqual({ success: true, summary: 'done' });
+  });
+
+  test('guide lists exactly the non-system prompts in the prompt library', () => {
+    const fixture = makeDeps();
+    const guide = fixture.tools.find((tool) => tool.definition.name === 'guide');
+    expect(guide).toBeDefined();
+    const parameters = guide?.definition.parameters as unknown as {
+      readonly properties: Readonly<Record<string, { readonly enum?: readonly string[] }>>;
+    };
+    const expected = fixture.deps.prompts.list().filter((name) => !name.endsWith('-system'));
+
+    expect(parameters.properties.name?.enum).toEqual(expected);
   });
 
   test('wait returns a delta and invalid arguments return errors instead of throwing', async () => {

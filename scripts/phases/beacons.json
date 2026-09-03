@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "phases": [
+    {
+      "name": "beacon-vote",
+      "durationTicks": 100,
+      "onExit": [
+        { "kind": "remove", "select": { "pollWinner": "beacon-exile" }, "reason": "beacon poll winner" }
+      ]
+    }
+  ]
+}

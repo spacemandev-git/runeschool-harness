@@ -24,7 +24,7 @@ export type WorldSelection =
   | { readonly kind: 'sandbox'; readonly query: string; readonly seed: number; readonly name?: string; readonly pvp?: boolean }
   | { readonly kind: 'resume'; readonly worldId: string }
   /** Attach to an already-running instance using credentials held elsewhere (e.g. from a config file). */
-  | { readonly kind: 'attach'; readonly instanceId: string; readonly httpUrl: string; readonly wsUrl: string; readonly actors: readonly ActorCredentials[]; /** Instance admin token; lets the admin persona act on a world this MCP session did not create. */ readonly adminToken?: string };
+  | { readonly kind: 'attach'; readonly instanceId: string; readonly httpUrl: string; readonly wsUrl: string; readonly actors: readonly ActorCredentials[]; /** Instance admin token; lets the admin persona act on a world this MCP session did not create. */ readonly adminToken?: string; /** Tile used by `addPlayer` when a request omits `spawnAt` (e.g. the first player's spawn of a sandbox created outside this session). */ readonly defaultSpawn?: TileCoord };
 
 export interface ProvisionedWorld {
   readonly instanceId: string;

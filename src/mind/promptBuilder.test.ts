@@ -24,7 +24,10 @@ describe('buildSystemPrompt', () => {
 
     expect(prompt).toContain('## Persona\n\nA fearless arena herald.');
     expect(prompt).toContain('## Voice\n\nBoom out theatrical challenges.');
-    expect(prompt).toContain('Deliver every public message in this voice.');
+    expect(prompt).toContain('Deliver every public `say` line in this voice.');
+    expect(prompt).toContain('## Commands\n\n# Actor commands');
+    expect(prompt).toContain('## Combat\n\n# Combat');
+    expect(prompt).toContain('## Navigation\n\n# Navigation');
   });
 
   test('uses the neutral voice fallback when voice is absent', () => {

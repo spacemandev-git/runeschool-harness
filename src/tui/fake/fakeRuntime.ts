@@ -50,7 +50,7 @@ function makeSnapshot(id: string, displayName: string, entity: number, at: TileC
     equipment: id === 'hero' ? { tool: { item: 3, name: 'Survey tool' } } : {},
     skills: { navigation: { level: id === 'hero' ? 5 : 1, xp: id === 'hero' ? 388 : 0 }, collection: { level: id === 'miner' ? 7 : 1, xp: id === 'miner' ? 650 : 0 }, endurance: { level: 10, xp: 1154 } },
     nearby: [], groundItems: [],
-    nodes: id === 'miner' ? [{ id: 'sample-1', at: { x: at.x + 1, z: at.z, level: 0 }, distance: 1, name: 'Sample deposit', skill: 'collection', requiredLevel: 1, depleted: false }] : [],
+    nodes: id === 'miner' ? [{ id: 'sample-1', at: { x: at.x + 1, z: at.z, level: 0 }, distance: 1, loc: 1, name: 'Sample deposit', skill: 'collection', requiredLevel: 1, depleted: false }] : [],
     stations: [], heatSources: [],
     objectives: [{ id: 'explore', description: 'Explore the training grounds', outcome: 'progress', complete: false, progress: [{ path: 'steps', kind: 'counter', current: 0, target: 10, satisfied: false }] }],
     won: false, lost: false, dialogue: { active: false }, chat: [], lastEventSeq: 0, resyncedTick: 0,

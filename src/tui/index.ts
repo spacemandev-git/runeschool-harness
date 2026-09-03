@@ -1,6 +1,10 @@
 export { createCockpit, type Cockpit, type CockpitOptions } from './app.ts';
 export { createFakeRuntime, type FakeRuntime } from './fake/fakeRuntime.ts';
-export { createWorldBrowserRuntime, type WorldBrowserRuntime } from './launcherRuntime.ts';
+export {
+  createCockpitLauncher,
+  type CockpitLauncher,
+  type CockpitLauncherOptions,
+} from './launcherRuntime.ts';
 export { createModelSelectionStore, defaultModelSelectionPath, type ModelSelectionStore } from './modelSelectionStore.ts';
 export { hpMeter, eventKindColor, theme } from './theme.ts';
 export { agentColumnWidths, agentHeader, agentRow, compactData, eventLine, snapshotText, usageLine } from './format.ts';

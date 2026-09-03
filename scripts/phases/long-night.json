@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "loop": true,
+  "phases": [
+    {
+      "name": "night",
+      "durationTicks": 200,
+      "onEnter": [
+        { "kind": "pause", "select": { "team": "village" }, "blind": true, "reason": "night" },
+        { "kind": "resume", "select": { "team": "afflicted" } }
+      ]
+    },
+    {
+      "name": "day",
+      "durationTicks": 200,
+      "onEnter": [
+        { "kind": "resume", "select": { "all": true } },
+        { "kind": "director", "text": "Day breaks" }
+      ]
+    }
+  ]
+}

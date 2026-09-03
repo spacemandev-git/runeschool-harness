@@ -6,7 +6,7 @@
  *  1. Rule DSL ({@link Rule}) — declarative JSON `when` → `do`, evaluated every pulse by the engine.
  *  2. Behaviours ({@link Behaviour}) — stateful procedures stepped every pulse until done/failed.
  */
-import type { JsonValue, Tick } from '#protocol';
+import type { JsonValue, Tick, TileCoord } from '#protocol';
 import type { ActionIntent, ActionOutcome } from './actions.ts';
 import type { WorldView } from './percept.ts';
 import type { WakeReason } from './types.ts';
@@ -42,6 +42,7 @@ export type Expr =
   | { readonly op: 'not'; readonly arg: Expr }
   | { readonly op: 'lt' | 'le' | 'gt' | 'ge' | 'eq' | 'ne'; readonly ref: RefPath; readonly value: Literal }
   | { readonly op: 'has-item'; readonly item: number | string; readonly min?: number }
+  | { readonly op: 'has-food' }
   | { readonly op: 'skill-at-least'; readonly skill: string; readonly level: number }
   | { readonly op: 'nearby'; readonly kind: 'npc' | 'player' | 'ground_item' | 'node' | 'station'; readonly name?: string; readonly radius?: number; readonly min?: number }
   | { readonly op: 'event'; readonly type: string; readonly withinTicks?: number }
@@ -50,6 +51,19 @@ export type Expr =
 
 export type RuleAction =
   | { readonly kind: 'command'; readonly type: string; readonly data: Readonly<Record<string, JsonValue>> }
+  | { readonly kind: 'eat'; readonly prefer?: 'highest-heal' | 'lowest-heal' }
+  | { readonly kind: 'attack-nearest'; readonly name?: string; readonly radius?: number; readonly targetKind?: 'npc' | 'player' | 'any' }
+  | { readonly kind: 'retaliate' }
+  | ({ readonly kind: 'cast'; readonly spell: string; readonly name?: string; readonly radius?: number } & (
+      | { readonly target: 'nearest'; readonly targetKind?: 'npc' | 'player' | 'any' }
+      | { readonly target?: 'attacker' | 'current'; readonly targetKind?: never }
+    ))
+  | { readonly kind: 'teleport'; readonly spell: string }
+  | { readonly kind: 'disengage' }
+  | { readonly kind: 'pickup-nearest'; readonly name?: string; readonly radius?: number }
+  | { readonly kind: 'flee'; readonly to?: TileCoord; readonly distance?: number }
+  | { readonly kind: 'pray'; readonly prayer: string }
+  | { readonly kind: 'bury-all' }
   | { readonly kind: 'start-behaviour'; readonly behaviour: string; readonly params: Readonly<Record<string, JsonValue>>; readonly replace?: boolean }
   | { readonly kind: 'stop-behaviour'; readonly id?: string }
   | { readonly kind: 'wake-mind'; readonly note: string }

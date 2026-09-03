@@ -1,0 +1,1 @@
+export { isVisibleTo } from '#world';

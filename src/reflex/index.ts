@@ -8,3 +8,5 @@ export type { RuleActionContext, RuleActionEngineOps } from './ruleActions.ts';
 export * from './behaviours/index.ts';
 export { makeSnapshot, FakeView, FakeContext, makeEvent } from './testing.ts';
 export type { SnapshotOverrides } from './testing.ts';
+export { REFLEX_PRESETS } from './presets.ts';
+export { FOOD_HEAL, isBones, isFood } from './tables.ts';

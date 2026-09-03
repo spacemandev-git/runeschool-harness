@@ -35,6 +35,8 @@ export interface CockpitOptions {
   readonly statusHint?: string;
   readonly worldDirectory?: WorldDirectory;
   readonly onWorldConnect?: (instance: BackendInstanceSummary) => void | Promise<void>;
+  readonly onSpawnScenario?: (scenarioId: string) => Promise<BackendInstanceSummary>;
+  readonly onSpawnSandbox?: (request: Readonly<Record<string, JsonValue>>) => Promise<BackendInstanceSummary>;
 }
 
 export interface Cockpit {
@@ -55,6 +57,21 @@ function parseObject(text: string): Readonly<Record<string, unknown>> {
   const value: unknown = JSON.parse(text);
   if (value === null || Array.isArray(value) || typeof value !== 'object') throw new Error('expected a JSON object');
   return value as Readonly<Record<string, unknown>>;
+}
+
+const SPAWN_HINT = 'connected · /spawn {"id":"hero","goal":"..."}';
+const ATTACHED_SPAWN_HINT = 'connected · /spawn {"id":"hero","goal":"...","spawn":{"at":{"x":0,"z":0,"level":0}}} · spawn tile required';
+
+function sandboxHasDefaultSpawn(request: Readonly<Record<string, JsonValue>>): boolean {
+  const players = request.players;
+  if (!Array.isArray(players)) return false;
+  const player = players[0];
+  if (typeof player !== 'object' || player === null || Array.isArray(player)) return false;
+  const spawnAt = player.spawnAt;
+  if (typeof spawnAt !== 'object' || spawnAt === null || Array.isArray(spawnAt)) return false;
+  return typeof spawnAt.x === 'number' && Number.isFinite(spawnAt.x)
+    && typeof spawnAt.z === 'number' && Number.isFinite(spawnAt.z)
+    && typeof spawnAt.level === 'number' && Number.isFinite(spawnAt.level);
 }
 
 export function createCockpit(options: CockpitOptions): Cockpit {
@@ -121,7 +138,24 @@ export function createCockpit(options: CockpitOptions): Cockpit {
       if (firstAgent !== undefined) agentScreen.setAgent(firstAgent);
       const worldScreen = createWorldScreen(activeRenderer, options.view, {
         ...(options.worldDirectory === undefined ? {} : { directory: options.worldDirectory }),
-        ...(options.onWorldConnect === undefined ? {} : { onConnect: options.onWorldConnect }),
+        async onConnect(instance) {
+          await options.onWorldConnect?.(instance);
+          status.setHint(ATTACHED_SPAWN_HINT);
+        },
+        ...(options.onSpawnScenario === undefined ? {} : {
+          async onSpawnScenario(scenarioId: string) {
+            const instance = await options.onSpawnScenario!(scenarioId);
+            status.setHint(SPAWN_HINT);
+            return instance;
+          },
+        }),
+        ...(options.onSpawnSandbox === undefined ? {} : {
+          async onSpawnSandbox(request: Readonly<Record<string, JsonValue>>) {
+            const instance = await options.onSpawnSandbox!(request);
+            status.setHint(sandboxHasDefaultSpawn(request) ? SPAWN_HINT : ATTACHED_SPAWN_HINT);
+            return instance;
+          },
+        }),
       });
       const traceScreen = createTraceScreen(activeRenderer, options.bus);
       const helpScreen = createHelpScreen(activeRenderer);
@@ -282,30 +316,34 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         }
         const connectWorld = text.match(/^\/world\s+connect\s+(\S+)$/);
         if (connectWorld?.[1] !== undefined) {
-          const instance = await worldScreen.connect(connectWorld[1]);
-          status.setHint(`connected to ${instance.id}`);
+          await worldScreen.connect(connectWorld[1]);
+          status.setHint(ATTACHED_SPAWN_HINT);
           selectTabIndex(4);
           return;
         }
         const scenarioWorld = text.match(/^\/world\s+scenario\s+(\S+)$/);
         if (scenarioWorld?.[1] !== undefined) {
-          const instance = await worldScreen.spawnScenario(scenarioWorld[1]);
-          status.setHint(`spawned and connected to ${instance.id}`);
+          await worldScreen.spawnScenario(scenarioWorld[1]);
+          status.setHint(SPAWN_HINT);
           selectTabIndex(4);
           return;
         }
         const sandboxWorld = text.match(/^\/world\s+sandbox\s+([\s\S]+)$/);
         if (sandboxWorld?.[1] !== undefined) {
           const request = parseObject(sandboxWorld[1]) as Readonly<Record<string, JsonValue>>;
-          const instance = await worldScreen.spawnSandbox(request);
-          status.setHint(`spawned and connected to ${instance.id}`);
+          await worldScreen.spawnSandbox(request);
+          status.setHint(sandboxHasDefaultSpawn(request) ? SPAWN_HINT : ATTACHED_SPAWN_HINT);
           selectTabIndex(4);
           return;
         }
         if (/^\/world(\s|$)/.test(text)) {
           throw new Error('usage: /world refresh | /world connect <instance> | /world scenario <scenario> | /world sandbox <json>');
         }
-        if (text === '/stop') { await options.commands.stop('operator'); return; }
+        if (text === '/stop') {
+          await options.commands.stop('operator');
+          status.setHint('stopped · connect to a RuneSchool instance from the World tab');
+          return;
+        }
         if (text === '/quit') {
           await options.commands.stop('operator');
           if (!attached) await cockpit.stop();

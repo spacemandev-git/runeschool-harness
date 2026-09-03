@@ -1,0 +1,2 @@
+import{describe,expect,test}from'bun:test';import{validateRule}from'./dsl.ts';import{REFLEX_PRESETS}from'./presets.ts';import{BUILTIN_BEHAVIOURS}from'./behaviours/index.ts';
+describe('reflex presets',()=>{test('every preset rule validates',()=>{const known=new Set(BUILTIN_BEHAVIOURS.map(v=>v.id));for(const rules of Object.values(REFLEX_PRESETS))for(const rule of rules)expect(validateRule(rule,known)).toEqual({ok:true,errors:[]});});});

@@ -28,12 +28,14 @@
     "./testing": "./src/testing.ts"
   },
   "scripts": {
+    "start": "bun run src/main.ts",
     "cockpit": "bun run src/tui/dev.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "check": "bun run typecheck && bun test"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@opentui/core": "^0.5.9"
   },
   "devDependencies": {

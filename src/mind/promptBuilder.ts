@@ -8,9 +8,10 @@ export interface SystemPromptState {
   readonly team?: string;
 }
 
-const ALWAYS_INCLUDED: readonly { readonly name: PromptName; readonly title: string }[] = [
-  { name: 'world-basics', title: 'World basics' },
-  { name: 'commands', title: 'Commands' }
+const GUIDE_SECTIONS: readonly { readonly name: PromptName; readonly title: string }[] = [
+  { name: 'commands', title: 'Commands' },
+  { name: 'combat', title: 'Combat' },
+  { name: 'navigation', title: 'Navigation' }
 ];
 
 function record(value: JsonValue | undefined): Readonly<Record<string, JsonValue>> | undefined {
@@ -96,6 +97,6 @@ export function buildSystemPrompt(deps: MindDeps, state: SystemPromptState): str
       'Keep replies to at most 3 sentences.'
     ].join(' ')
   });
-  const grounding = ALWAYS_INCLUDED.map(({ name, title }) => `## ${title}\n\n${deps.prompts.get(name)}`).join('\n\n');
-  return `${frame}\n\n${grounding}`;
+  const grounding = GUIDE_SECTIONS.map(({ name, title }) => `## ${title}\n\n${deps.prompts.get(name)}`).join('\n\n');
+  return `${frame}\n\n## World basics\n\n${deps.prompts.get('world-basics')}\n\n${grounding}`;
 }

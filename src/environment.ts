@@ -9,11 +9,25 @@ export interface HarnessEnvironment {
   readonly routerApiBase: string;
   readonly routerModel: string;
   readonly runeschoolApiBackend: string;
+  readonly runeschoolMcpUrl: string;
+  readonly runeschoolUiUrl?: string;
 }
 
 function setting(env: Environment, name: string, fallback: string): string {
   const value = env[name]?.trim();
   return value === undefined || value.length === 0 ? fallback : value;
+}
+
+function optionalSetting(env: Environment, ...names: readonly string[]): string | undefined {
+  for (const name of names) {
+    const value = env[name]?.trim();
+    if (value !== undefined && value.length > 0) return value;
+  }
+  return undefined;
+}
+
+function trimTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/, '');
 }
 
 /**
@@ -22,9 +36,18 @@ function setting(env: Environment, name: string, fallback: string): string {
  * displayable runtime configuration.
  */
 export function loadHarnessEnvironment(env: Environment = process.env): HarnessEnvironment {
+  const runeschoolApiBackend = trimTrailingSlashes(
+    setting(env, 'RUNESCHOOL_API_BACKEND', DEFAULT_RUNESCHOOL_API_BACKEND)
+  );
+  const runeschoolMcpUrl = trimTrailingSlashes(
+    optionalSetting(env, 'RUNESCHOOL_MCP_URL', 'AISCAPE_MCP_URL') ?? `${runeschoolApiBackend}/mcp`
+  );
+  const runeschoolUiUrl = optionalSetting(env, 'RUNESCHOOL_UI_URL', 'AISCAPE_UI_URL');
   return {
     routerApiBase: setting(env, 'ROUTER_API_BASE', DEFAULT_ROUTER_API_BASE),
     routerModel: setting(env, 'ROUTER_MODEL', DEFAULT_ROUTER_MODEL),
-    runeschoolApiBackend: setting(env, 'RUNESCHOOL_API_BACKEND', DEFAULT_RUNESCHOOL_API_BACKEND)
+    runeschoolApiBackend,
+    runeschoolMcpUrl,
+    ...(runeschoolUiUrl === undefined ? {} : { runeschoolUiUrl: trimTrailingSlashes(runeschoolUiUrl) })
   };
 }

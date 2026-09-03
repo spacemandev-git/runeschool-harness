@@ -4,9 +4,11 @@
 import type { CommandResult, Tick } from '#protocol';
 
 /**
- * Commands denied in every adapter. Adapters can add their own denied commands through `MindDeps`.
+ * Actor commands the harness never lets an agent send even though the sim's `ActorCommand` union
+ * allows them. `move` is a no-pathing teleport intended for authoring/tests; agents must `walk`/`run`.
+ * Sinks reject these with `code: 'denied_command'`.
  */
-export const AGENT_DENIED_COMMANDS: readonly string[] = Object.freeze([]);
+export const AGENT_DENIED_COMMANDS: readonly string[] = Object.freeze(['move']);
 
 /** Who produced an action. Used for arbitration, the TUI, and the trace. */
 export type ActionSource =
@@ -18,7 +20,7 @@ export type ActionSource =
 
 /** A command without `entity`; the sink injects the agent's entity id. */
 export interface ActionIntent {
-  /** A command advertised by the active world adapter. */
+  /** One of `ACTOR_COMMAND_TYPES` from `@runeschool/shared` (never an admin command). */
   readonly type: string;
   readonly data: Readonly<Record<string, unknown>>;
   readonly source: ActionSource;

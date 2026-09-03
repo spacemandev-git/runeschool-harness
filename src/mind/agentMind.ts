@@ -3,7 +3,7 @@ import type { Mind, MindDeps } from '../core/agent.ts';
 import type { ChatMessage, ToolCall } from '../core/model.ts';
 import type { AgentState, WakeReason } from '../core/types.ts';
 import { charEstimator } from '../models/tokens.ts';
-import { renderDeltaLines, renderSnapshot } from '../format.ts';
+import { renderDeltaLines, renderSnapshot, type NameLookup } from '../perception/summarizer.ts';
 import { createContextManager } from './contextManager.ts';
 import { buildDigest, type DigestMemory } from './digest.ts';
 import { buildSystemPrompt } from './promptBuilder.ts';
@@ -46,6 +46,7 @@ export interface AgentMindOptions {
 }
 
 export function createAgentMind(deps: MindDeps, options: AgentMindOptions = {}): Mind {
+  const nameOf: NameLookup = (kind, id) => deps.view.nameOf(kind, id);
   let goal = deps.spec.goal?.trim() ?? '';
   let paused = false;
   let finished = false;
@@ -167,7 +168,7 @@ export function createAgentMind(deps: MindDeps, options: AgentMindOptions = {}):
         reasons,
         snapshot,
         messages: mailboxMessages,
-        deltaLines: renderDeltaLines(delta, (kind, id) => deps.view.nameOf(kind, id)),
+        deltaLines: renderDeltaLines(delta, nameOf),
         memories,
         ...(note === undefined ? {} : { note }),
         ...(firstWakeAfterGoal ? { fullObservation: renderSnapshot(snapshot) } : {}),

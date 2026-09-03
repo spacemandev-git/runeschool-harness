@@ -24,6 +24,8 @@ type WorldChoice =
 export interface WorldScreenOptions {
   readonly directory?: WorldDirectory;
   readonly onConnect?: (instance: BackendInstanceSummary) => void | Promise<void>;
+  readonly onSpawnScenario?: (scenarioId: string) => Promise<BackendInstanceSummary>;
+  readonly onSpawnSandbox?: (request: Readonly<Record<string, JsonValue>>) => Promise<BackendInstanceSummary>;
 }
 
 export interface WorldScreen {
@@ -197,9 +199,11 @@ export function createWorldScreen(renderer: CliRenderer, view: RuntimeView, opti
   const spawnScenario = async (scenarioId: string): Promise<BackendInstanceSummary> => {
     if (options.directory === undefined) throw new Error('backend world directory is not configured');
     return await run(`spawned scenario ${scenarioId}`, async () => {
-      const instance = await options.directory!.spawnScenario(scenarioId);
+      const instance = options.onSpawnScenario === undefined
+        ? await options.directory!.spawnScenario(scenarioId)
+        : await options.onSpawnScenario(scenarioId);
       connected = instance;
-      await options.onConnect?.(instance);
+      if (options.onSpawnScenario === undefined) await options.onConnect?.(instance);
       instances = await options.directory!.listInstances();
       updateChoices();
       return instance;
@@ -209,9 +213,11 @@ export function createWorldScreen(renderer: CliRenderer, view: RuntimeView, opti
   const spawnSandbox = async (request: Readonly<Record<string, JsonValue>>): Promise<BackendInstanceSummary> => {
     if (options.directory === undefined) throw new Error('backend world directory is not configured');
     return await run('spawned sandbox', async () => {
-      const instance = await options.directory!.spawnSandbox(request);
+      const instance = options.onSpawnSandbox === undefined
+        ? await options.directory!.spawnSandbox(request)
+        : await options.onSpawnSandbox(request);
       connected = instance;
-      await options.onConnect?.(instance);
+      if (options.onSpawnSandbox === undefined) await options.onConnect?.(instance);
       instances = await options.directory!.listInstances();
       updateChoices();
       return instance;

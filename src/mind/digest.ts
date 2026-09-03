@@ -21,12 +21,17 @@ export interface DigestInput {
 
 function activity(snapshot: WorldSnapshot): string {
   const current = snapshot.self.activity;
-  if (current.kind === 'walking' && current.dest !== undefined) {
-    const dest = current.dest;
-    return `walking to (${dest.x},${dest.z},${dest.level})`;
+  switch (current.kind) {
+    case 'idle': return 'idle';
+    case 'walking': return `walking to (${current.dest.x},${current.dest.z},${current.dest.level})`;
+    case 'fighting': return `fighting entity#${current.target}`;
+    case 'gathering': return `gathering ${current.node}`;
+    case 'fishing': return `fishing entity#${current.spot}`;
+    case 'producing': return current.what;
+    case 'thieving': return 'thieving';
+    case 'agility': return 'agility';
+    case 'dialogue': return 'dialogue';
   }
-  if (current.kind === 'acting' && current.action !== undefined) return current.action;
-  return current.kind;
 }
 
 function oneLine(value: string): string {

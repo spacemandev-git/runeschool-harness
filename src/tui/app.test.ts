@@ -267,3 +267,59 @@ test('World lists backend instances and connects or spawns the selected row', as
   await cockpit.stop();
   await running;
 });
+
+test('World scenario and sandbox commands use custom provisioning handlers when provided', async () => {
+  const setup = await createTestRenderer({ width: 120, height: 40 });
+  const bus = createBus();
+  const fake = createFakeRuntime(bus);
+  const scenarioCalls: string[] = [];
+  const sandboxCalls: unknown[] = [];
+  let directoryScenarioCalls = 0;
+  let directorySandboxCalls = 0;
+  const summary = (id: string, kind: string) => ({
+    id, kind, tick: 0, state: 'running', entityCount: 0, realtime: true, pvp: false,
+  });
+  const directory: WorldDirectory = {
+    backendUrl: 'https://game.example',
+    async listInstances() { return []; },
+    async listScenarios() { return []; },
+    async connect(id) { return summary(id, 'sandbox'); },
+    async spawnScenario() { directoryScenarioCalls += 1; return summary('directory-scenario', 'scenario'); },
+    async spawnSandbox() { directorySandboxCalls += 1; return summary('directory-sandbox', 'sandbox'); },
+    async close() {},
+  };
+  const cockpit = createCockpit({
+    view: fake.view,
+    commands: fake.commands,
+    bus,
+    renderer: setup.renderer,
+    worldDirectory: directory,
+    async onSpawnScenario(scenarioId) {
+      scenarioCalls.push(scenarioId);
+      return summary('runtime-scenario', 'scenario');
+    },
+    async onSpawnSandbox(request) {
+      sandboxCalls.push(request);
+      return summary('runtime-sandbox', 'sandbox');
+    },
+  });
+  const running = cockpit.start();
+  await setup.waitForFrame((frame) => frame.includes('RuneSchool cockpit'));
+  setup.renderer.root.findDescendantById('footer')?.focus();
+
+  await setup.mockInput.typeText('/world scenario goblin-ambush');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(30);
+  await setup.mockInput.typeText('/world sandbox {"players":[{"spawnAt":{"x":1,"z":2,"level":0}}]}');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(30);
+
+  expect(scenarioCalls).toEqual(['goblin-ambush']);
+  expect(sandboxCalls).toEqual([{ players: [{ spawnAt: { x: 1, z: 2, level: 0 } }] }]);
+  expect(directoryScenarioCalls).toBe(0);
+  expect(directorySandboxCalls).toBe(0);
+
+  await cockpit.stop();
+  await running;
+  fake.stop();
+});
