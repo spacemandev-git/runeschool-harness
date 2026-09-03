@@ -354,7 +354,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
             ctrlCAt = now;
             status.setHint('press Ctrl+C again within 2s to stop');
           }
-        } else if (focusIndex !== 2 && !key.ctrl && !key.meta && key.name === 'q') {
+        } else if (!footer.focused && !key.ctrl && !key.meta && key.name === 'q') {
           consumed = true;
           if (attached) {
             options.onDetach?.();
@@ -383,13 +383,13 @@ export function createCockpit(options: CockpitOptions): Cockpit {
           footer.setText('');
           traceScreen.setFilter('');
           status.setHint('trace filter cleared');
-        } else if (focusIndex !== 2 && !key.ctrl && !key.meta && /^[1-7]$/.test(key.name)) {
+        } else if (!footer.focused && !key.ctrl && !key.meta && /^[1-7]$/.test(key.name)) {
           consumed = true;
           selectTabIndex(Number(key.name) - 1);
-        } else if (focusIndex !== 2 && key.name === '?') {
+        } else if (!footer.focused && key.name === '?') {
           consumed = true;
           selectTabIndex(6);
-        } else if (focusIndex !== 2 && selectedTab === 3 && key.shift && (key.name === '[' || key.name === ']' || key.name === '{' || key.name === '}')) {
+        } else if (!footer.focused && selectedTab === 3 && key.shift && (key.name === '[' || key.name === ']' || key.name === '{' || key.name === '}')) {
           consumed = true;
           const list = options.view.agents();
           const current = list.findIndex((agent) => agent.id === selectedAgentId());

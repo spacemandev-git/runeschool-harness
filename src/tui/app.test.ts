@@ -137,6 +137,34 @@ test('model bar shows the model relevant to each role tab', async () => {
   fake.stop();
 });
 
+test('number keys type into the actually focused footer instead of switching tabs', async () => {
+  const setup = await createTestRenderer({ width: 100, height: 24 });
+  const bus = createBus();
+  const fake = createFakeRuntime(bus);
+  let directorCalls = 0;
+  const commands = {
+    ...fake.commands,
+    async directorSay(text: string) {
+      directorCalls += 1;
+      expect(text).toBe('model 123');
+    },
+  };
+  const cockpit = createCockpit({ view: fake.view, commands, bus, renderer: setup.renderer });
+  const running = cockpit.start();
+  await setup.renderOnce();
+
+  setup.mockInput.pressTab();
+  setup.renderer.root.findDescendantById('footer')?.focus();
+  await setup.mockInput.typeText('model 123');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(20);
+
+  expect(directorCalls).toBe(1);
+  await cockpit.stop();
+  await running;
+  fake.stop();
+});
+
 test('q twice and /quit stop an owning cockpit', async () => {
   for (const useQuitCommand of [false, true]) {
     const setup = await createTestRenderer({ width: 100, height: 24 });
