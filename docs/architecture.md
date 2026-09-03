@@ -42,6 +42,7 @@ created with MCP `add_player`.
 
 Each agent owns an actor link. The link opens the instance WebSocket, claims the actor with its
 token, subscribes to events, rate-limits commands, and matches acknowledgements to pending actions.
+On shutdown it sends a `leave` command, waits briefly for the acknowledgement, and then closes the socket.
 It also performs scoped HTTP reads. Incoming events feed the vendored SDK world model, which folds
 state, applies visibility, creates snapshots, and computes deltas. The compatibility layer in
 `src/perception` adds summaries and rejection information used by the agent mind and reflex engine.

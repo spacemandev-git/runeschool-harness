@@ -8,10 +8,12 @@ class FakeWebSocket extends EventTarget {
   readyState: number = WebSocket.CONNECTING;
   readonly commands: ClientCommand[] = [];
   readonly times: number[] = [];
+  readonly lifecycle: string[] = [];
   readonly url: string;
 
   constructor(url: string, private readonly options: {
     readonly drop?: ReadonlySet<string>;
+    readonly leaveOk?: boolean;
     readonly retained?: ServerEvent;
   } = {}) {
     super();
@@ -26,11 +28,16 @@ class FakeWebSocket extends EventTarget {
   send(raw: string): void {
     const command = JSON.parse(raw) as ClientCommand;
     this.commands.push(command);
+    this.lifecycle.push(`send:${command.type}`);
     if (command.type !== 'claim') this.times.push(Date.now());
     if (this.options.drop?.has(command.type) === true) return;
     queueMicrotask(() => this.receive(command.type === 'claim'
       ? { id: command.id, ok: true, tick: 1, role: 'actor', entity: 7 }
-      : { id: command.id, ok: true, tick: this.commands.length }));
+      : {
+          id: command.id,
+          ok: command.type === 'leave' ? (this.options.leaveOk ?? true) : true,
+          tick: this.commands.length
+        }));
   }
 
   receive(value: unknown): void {
@@ -38,7 +45,9 @@ class FakeWebSocket extends EventTarget {
   }
 
   close(): void {
+    this.lifecycle.push('close');
     this.readyState = WebSocket.CLOSED;
+    this.lifecycle.push('close-event');
     this.dispatchEvent(new CloseEvent('close', { code: 1000, reason: 'test closed' }));
   }
 
@@ -115,5 +124,45 @@ describe('createActorLink', () => {
     expect(socket?.commands.slice(2).map((command) => command.type)).toEqual(types);
     expect(socket?.times.at(-1)! - socket!.times[0]!).toBeGreaterThanOrEqual(1_400);
     await rateLink.close();
+  });
+
+  test('sends leave before closing and bounds the wait for its result', async () => {
+    let replyingSocket: FakeWebSocket | undefined;
+    const replyingLink = createActorLink(credentials(), createBus(), {
+      webSocketFactory: (url) => (replyingSocket = new FakeWebSocket(url, { leaveOk: false })).asWebSocket()
+    });
+    await replyingLink.connect();
+    const replyStartedAt = Date.now();
+    const replyingClose = replyingLink.close();
+    expect(replyingLink.close()).toBe(replyingClose);
+    await replyingClose;
+    const replyElapsed = Date.now() - replyStartedAt;
+    const leave = replyingSocket?.commands.find((command) => command.type === 'leave');
+    expect(leave).toMatchObject({
+      type: 'leave',
+      instance: 'inst',
+      data: {}
+    });
+    expect(leave?.id).toMatch(/^leave-\d+$/);
+    expect(replyingSocket?.lifecycle.indexOf('send:leave')).toBeLessThan(
+      replyingSocket?.lifecycle.indexOf('close-event') ?? -1
+    );
+    expect(replyElapsed).toBeLessThan(250);
+
+    let silentSocket: FakeWebSocket | undefined;
+    const silentLink = createActorLink(credentials(), createBus(), {
+      webSocketFactory: (url) => (silentSocket = new FakeWebSocket(url, { drop: new Set(['leave']) })).asWebSocket()
+    });
+    await silentLink.connect();
+    const silentStartedAt = Date.now();
+    await silentLink.close();
+    const silentElapsed = Date.now() - silentStartedAt;
+    expect(silentSocket?.commands.find((command) => command.type === 'leave')).toMatchObject({
+      instance: 'inst'
+    });
+    expect(silentSocket?.lifecycle.indexOf('send:leave')).toBeLessThan(
+      silentSocket?.lifecycle.indexOf('close-event') ?? -1
+    );
+    expect(silentElapsed).toBeLessThan(500);
   });
 });

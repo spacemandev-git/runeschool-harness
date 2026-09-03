@@ -398,21 +398,46 @@ export function createActorLink(
     close(): Promise<void> {
       closePromise ??= (async () => {
         const active = socket;
+        if (state === 'open' && active !== undefined && active.readyState === WebSocket.OPEN) {
+          const id = `leave-${++sequence}`;
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+              pending.delete(id);
+              resolve();
+            }, 300);
+            pending.set(id, {
+              timeout,
+              resolve: () => resolve()
+            });
+            try {
+              active.send(JSON.stringify({ type: 'leave', instance: credentials.instanceId, id, data: {} }));
+            } catch {
+              clearTimeout(timeout);
+              pending.delete(id);
+              resolve();
+            }
+          });
+        }
         socket = undefined;
         if (state !== 'failed') state = 'closed';
         settlePending('link_closed', 'Actor link closed');
         flushQueue();
-        deliverClose('Actor link closed');
+        try { deliverClose('Actor link closed'); } catch { /* listener failures must not block shutdown */ }
         if (active === undefined || active.readyState === WebSocket.CLOSED) return;
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(resolve, 500);
-          active.addEventListener('close', () => {
+          try {
+            active.addEventListener('close', () => {
+              clearTimeout(timeout);
+              resolve();
+            }, { once: true });
+            active.close(1000, 'harness finished');
+          } catch {
             clearTimeout(timeout);
             resolve();
-          }, { once: true });
-          try { active.close(1000, 'harness finished'); } catch { clearTimeout(timeout); resolve(); }
+          }
         });
-      })();
+      })().catch(() => { /* close is best-effort and never rejects */ });
       return closePromise;
     }
   };
