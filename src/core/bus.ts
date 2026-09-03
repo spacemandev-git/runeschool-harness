@@ -18,7 +18,7 @@ export interface HarnessEventMap {
 
   'mcp.connected': { readonly url: string; readonly tools: readonly string[] };
   'mcp.tool': { readonly name: string; readonly arguments: JsonValue; readonly ok: boolean; readonly durationMs: number; readonly resultPreview: string };
-  'world.provisioned': { readonly instanceId: string; readonly httpUrl: string; readonly wsUrl: string; readonly kind: 'scenario' | 'sandbox' | 'resumed' | 'attached'; readonly watchUrl?: string };
+  'world.provisioned': { readonly instanceId: string; readonly httpUrl: string; readonly wsUrl: string; readonly kind: 'scenario' | 'sandbox' | 'resumed' | 'attached' | 'hosted'; readonly watchUrl?: string };
 
   'agent.spawned': {
     readonly agentId: AgentId; readonly tag: string; readonly entity: number; readonly team?: TeamId;

@@ -1,12 +1,16 @@
+import { join } from 'node:path';
 import type { JsonValue } from '#protocol';
 import type {
-  ActorCredentials, AddPlayerRequest, Admin, AdminFactory, AgentHandle, AgentSpec, ChatMessage, DefsReader,
-  HarnessBus, McpSession, MemoryStoreFactory, MindFactory, ModelRegistry, PromptLibrary, ProvisionedWorld, RunConfig,
-  LiveRuntimeCommands, RuntimeView, TeamId
+  Admin, AdminFactory, AgentHandle, AgentIdentityStore, AgentSpec, ChatMessage, DefsReader,
+  HarnessBus, HostedWorldClient, McpSession, MemoryStoreFactory, MindFactory, ModelRegistry, PromptLibrary,
+  ProvisionedWorld, RunConfig, LiveRuntimeCommands, RuntimeView, TeamId
 } from '../core/index.ts';
 import { createCoordinator, createDirector, type Coordinator, type Director } from '../director/index.ts';
 import { createDefsReader, createMcpSession, serverBaseUrlOf } from '../transport/index.ts';
+import { createAgentIdentityStore } from '../transport/agentIdentity.ts';
+import { createHostedWorldClient } from '../transport/hostedWorld.ts';
 import { createAgentRuntime, type AgentRuntime } from './agentRuntime.ts';
+import { agentPlayerRequest, provisionHostedWorld, resolveAgentCredentials } from './credentials.ts';
 import { createMailboxes } from './mailbox.ts';
 import { createJsonlTrace } from './trace.ts';
 import { createRuntimeSurface, type RuntimeTeamRecord } from './view.ts';
@@ -27,20 +31,12 @@ export interface HarnessRuntimeDeps {
   readonly mindFactory: MindFactory;
   readonly adminFactory?: AdminFactory;
   readonly mcp?: McpSession;
+  readonly hostedWorld?: HostedWorldClient;
+  readonly identities?: AgentIdentityStore;
   readonly now?: () => number;
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
-function playerRequest(spec: AgentSpec): AddPlayerRequest {
-  return {
-    tag: spec.tag ?? spec.id,
-    ...(spec.displayName === undefined ? {} : { displayName: spec.displayName }),
-    ...(spec.spawn?.at === undefined ? {} : { spawnAt: spec.spawn.at }),
-    ...(spec.spawn?.stats === undefined ? {} : { stats: spec.spawn.stats }),
-    ...(spec.spawn?.inventory === undefined ? {} : { inventory: spec.spawn.inventory }),
-    ...(spec.spawn?.equipment === undefined ? {} : { equipment: spec.spawn.equipment })
-  };
-}
 
 function serializedMessages(messages: readonly ChatMessage[]): readonly { role: string; content: string; name?: string }[] {
   return messages.map((message) => ({
@@ -84,6 +80,12 @@ export function createHarnessRuntime(config: RunConfig, deps: HarnessRuntimeDeps
   const now = deps.now ?? Date.now;
   const startedAt = now();
   const mcp = deps.mcp ?? createMcpSession(config.mcpUrl, deps.bus);
+  const hostedWorld = config.world.kind === 'hosted'
+    ? deps.hostedWorld ?? createHostedWorldClient({ backendUrl: config.world.backendUrl })
+    : deps.hostedWorld;
+  const identities = config.world.kind === 'hosted'
+    ? deps.identities ?? createAgentIdentityStore(join(config.dataDir, 'identities'))
+    : deps.identities;
   const traced = withModelRequestContent(deps.models, deps.bus, config.traceModelMessages === true);
   const trace = createJsonlTrace(deps.bus, config.logDir, config.runId);
   const mailboxes = createMailboxes(deps.bus, now);
@@ -121,22 +123,17 @@ export function createHarnessRuntime(config: RunConfig, deps: HarnessRuntimeDeps
     defs = undefined;
   };
 
-  async function credentialsFor(spec: AgentSpec): Promise<ActorCredentials> {
+  async function credentialsFor(spec: AgentSpec) {
     if (world === undefined) throw new Error('World is not provisioned');
-    const tag = spec.tag ?? spec.id;
-    const existing = config.world.kind === 'scenario' && spec.useExistingSlot === true && spec.tag === undefined
-      ? world.actors[0]
-      : world.actors.find((actor) => actor.tag === tag);
-    if (config.world.kind === 'scenario' && spec.useExistingSlot === true) {
-      if (existing === undefined) throw new Error(`Agent '${spec.id}' requested existing actor slot '${tag}', but it was not provisioned`);
-      return existing;
-    }
-    if (config.world.kind === 'sandbox') {
-      if (existing !== undefined) return existing;
-      return await mcp.addPlayer(world.instanceId, playerRequest(spec));
-    }
-    if ((config.world.kind === 'resume' || config.world.kind === 'attach') && existing !== undefined) return existing;
-    return await mcp.addPlayer(world.instanceId, playerRequest(spec));
+    return await resolveAgentCredentials({
+      selection: config.world,
+      spec,
+      world,
+      mcp,
+      ...(hostedWorld === undefined ? {} : { hostedWorld }),
+      ...(identities === undefined ? {} : { identities }),
+      warn(message) { deps.bus.emit('log', { level: 'warn', scope: 'runtime', message }); },
+    });
   }
 
   async function spawnAgent(spec: AgentSpec): Promise<void> {
@@ -261,13 +258,30 @@ export function createHarnessRuntime(config: RunConfig, deps: HarnessRuntimeDeps
       started = true;
       deps.bus.emit('run.start', { runId: config.runId, config: surface.view.config() });
       try {
-        await mcp.connect();
+        if (config.world.kind === 'hosted') {
+          try {
+            await mcp.connect();
+          } catch {
+            deps.bus.emit('log', {
+              level: 'warn',
+              scope: 'runtime',
+              message: 'MCP connection failed for shared hosted world; continuing without MCP tools',
+            });
+          }
+        } else {
+          await mcp.connect();
+        }
         const players = config.world.kind === 'sandbox'
-          ? config.agents.map(playerRequest)
+          ? config.agents.map(agentPlayerRequest)
           : config.world.kind === 'scenario'
-            ? config.agents.filter((agent) => agent.useExistingSlot !== true).map(playerRequest)
+            ? config.agents.filter((agent) => agent.useExistingSlot !== true).map(agentPlayerRequest)
             : [];
-        world = await mcp.provision(config.world, players);
+        if (config.world.kind === 'hosted') {
+          if (hostedWorld === undefined) throw new Error('Hosted-world client is unavailable');
+          world = await provisionHostedWorld(hostedWorld, config.world.backendUrl);
+        } else {
+          world = await mcp.provision(config.world, players);
+        }
         defs = createDefsReader(serverBaseUrlOf(world.httpUrl));
         deps.bus.emit('world.provisioned', {
           instanceId: world.instanceId, httpUrl: world.httpUrl, wsUrl: world.wsUrl,

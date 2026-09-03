@@ -6,6 +6,7 @@ import type { MemoryStoreFactory } from '../core/memory.ts';
 import type { ModelRegistry } from '../core/model.ts';
 import type { PromptLibrary } from '../core/prompts.ts';
 import type { ModelSelection, RunConfig, RuntimeCommands, RuntimeView } from '../core/runtime.ts';
+import type { HostedWorldClient } from '../core/transport.ts';
 import { applyModelSelection, validateAndApplyModelSelection } from '../models/selection.ts';
 import {
   createHarnessRuntime,
@@ -24,6 +25,7 @@ export interface CockpitLauncherOptions {
   readonly memoryFactory: MemoryStoreFactory;
   readonly mindFactory: MindFactory;
   readonly adminFactory: AdminFactory;
+  readonly hostedWorld?: HostedWorldClient;
   readonly logDir: string;
   readonly dataDir: string;
   readonly initialModelSelections?: readonly ModelSelection[];
@@ -134,6 +136,7 @@ export function createCockpitLauncher(options: CockpitLauncherOptions): CockpitL
     memoryFactory: options.memoryFactory,
     mindFactory: options.mindFactory,
     adminFactory: options.adminFactory,
+    ...(options.hostedWorld === undefined ? {} : { hostedWorld: options.hostedWorld }),
     ...(options.now === undefined ? {} : { now: options.now }),
   });
 
@@ -172,6 +175,20 @@ export function createCockpitLauncher(options: CockpitLauncherOptions): CockpitL
     view,
     commands,
     async connect(instance, connectOptions) {
+      let hosted = false;
+      try {
+        const status = await options.hostedWorld?.status();
+        hosted = status?.instanceId === instance.id;
+      } catch {
+        // Hosted-world discovery is optional; ordinary attachment remains available.
+      }
+      if (hosted) {
+        await activate({
+          ...baseConfig(),
+          world: { kind: 'hosted', backendUrl: options.backendUrl },
+        });
+        return;
+      }
       const httpUrl = `${options.backendUrl}/instances/${encodeURIComponent(instance.id)}`;
       await activate({
         ...baseConfig(),

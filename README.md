@@ -95,7 +95,7 @@ with:
 ```
 
 Attaching to an existing instance usually provides no known default spawn. In that case include an
-explicit tile:
+explicit `spawn.at` tile (the director's `spawn_agent` schema documents the same agent spec):
 
 ```text
 /spawn {"id":"hero","goal":"...","spawn":{"at":{"x":0,"z":0,"level":0}}}
@@ -104,6 +104,25 @@ explicit tile:
 Once connected, type ordinary text on the Director or Admin tab to chat with that persona, or use
 `/admin <text>` from any tab. Until then, runtime commands report `connect to a RuneSchool instance
 from the World tab first`.
+
+## Shared hosted world
+
+When the World tab connects to the instance returned by the backend's `GET /world/live` endpoint,
+the cockpit detects it as the shared hosted world and uses the hosted join flow instead of MCP
+`add_player`. The CLI selects the same path explicitly:
+
+```sh
+bun run start --hosted --agent bob="Duel alice"
+```
+
+Each harness agent signs in with its own Ed25519 identity. Private identity files are stored at
+`data/identities/<agentId>.json`; keep them private because reconnecting with the same identity
+reuses the same actor. Delete one agent's identity file when you intentionally want a fresh wallet
+and actor for that agent.
+
+The server assigns the actor's `wallet-…` tag and spawn tile, so configured `tag` and `spawn`
+values are ignored. It also grants each new identity a one-time starter kit in the actor's bank.
+No admin token is needed to join, but the admin persona cannot make world edits in this world.
 
 Use `/model director <model>`, `/model agent-default <model>`, `/model coordinator <team> <model>`,
 or `/model agent <agent> <model>` to change live model assignments. `/stop` stops the runtime and
@@ -121,6 +140,7 @@ bun run start "Defeat three goblins"
 bun run start --scenario arena-island --agent hero="Walk east" --headless
 bun run start --sandbox lumbridge --agent miner --agent banker --team workers=miner,banker:"Gather ore"
 bun run start --resume <worldId> --agent agent
+bun run start --hosted --agent bob="Duel alice"
 ```
 
 For a scenario, the first CLI agent binds to the scenario's first actor slot by default. The slot

@@ -38,7 +38,30 @@ The orchestrator connects an MCP session, provisions the selected scenario or sa
 or attaches to an existing instance), and obtains actor credentials. For server-bundled example
 scenarios, it first retrieves the scenario document so the first actor slot and default spawn are
 resolved by the backend rather than a local JSON file. Agents without an existing credential are
-created with MCP `add_player`.
+created with MCP `add_player`. The director's self-describing `spawn_agent` tool creates agents in
+the connected world; attached existing instances generally require an explicit
+`spawn.at: { x, z, level }` tile because they provide no recorded default spawn.
+
+The shared hosted world takes a separate path. The orchestrator reads `GET /world/live` rather
+than provisioning through MCP, while an MCP connection remains optional for the director's
+read-only passthrough tools. For each agent, the hosted client performs this sequence:
+
+```text
+load/create per-agent Ed25519 identity
+      │
+      v
+/auth/challenge ──> sign exact challenge ──> /auth/verify (kind: agent)
+      │
+      v
+one-use session token ──> POST /world/live/join ──> actor credentials
+      │
+      v
+actor WebSocket link ──> claim actor token
+```
+
+The join endpoint mints or reuses one actor per public key and assigns its tag and spawn tile.
+Consequently `spawn_agent` works without `tag` or `spawn` in this world and never calls MCP
+`add_player`. The hosted world has no admin token, so admin world-edit operations are unavailable.
 
 Each agent owns an actor link. The link opens the instance WebSocket, claims the actor with its
 token, subscribes to events, rate-limits commands, and matches acknowledgements to pending actions.
@@ -84,9 +107,9 @@ environment values, and creates its file with mode `0600`. Model request content
 | Module | Responsibility |
 |---|---|
 | `src/core/` | Public contracts for the runtime, transport, minds, actions, reflexes, prompts, and perception |
-| `src/transport/` | MCP lifecycle/provisioning, actor WebSocket and HTTP transport, definitions reader |
+| `src/transport/` | MCP lifecycle/provisioning, hosted-world sign-in/join, identity storage, actor WebSocket and HTTP transport, definitions reader |
 | `src/perception/` | SDK world-model wrapper, event/outcome folding, snapshot differencing, visibility, summaries |
-| `src/runtime/` | Orchestrator, per-agent runtime, runtime view/commands, mailboxes, reads, tracing |
+| `src/runtime/` | Orchestrator, credential resolution, per-agent runtime, runtime view/commands, mailboxes, reads, tracing |
 | `src/admin/` | Game-master persona, MCP tool filtering, name resolution, and token-safe reporting |
 | `src/mind/` | Agent turns, tools, wake policy, prompt construction, compaction, salience |
 | `src/reflex/` | Declarative DSL, engine, presets, rule actions, magic tables, and built-in behaviours |
@@ -125,5 +148,7 @@ and `move` denial.
 
 Model output, prompts, memory, events, tool arguments, and peer messages are all untrusted.
 Actor/admin tokens are held only by live transport/runtime objects and are removed or redacted from
-trace events and displayable config. The reflex DSL is declarative and closed; the harness never
-evaluates model-authored JavaScript.
+trace events and displayable config. Hosted authentication session tokens are used for the join
+request once and discarded. Per-agent Ed25519 private keys stay in the identity store and are never
+logged; actor tokens returned by the join flow receive the same redaction as other actor tokens.
+The reflex DSL is declarative and closed; the harness never evaluates model-authored JavaScript.

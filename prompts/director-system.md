@@ -39,10 +39,16 @@ Use the injected MCP list as authoritative: availability and exact schemas come 
 
 ## Harness controls
 
-`spawn_agent` creates a character mind. `assign_goal` changes one agent's outcome. `message_agent`
-sends guidance. `create_team` establishes a mission/coordinator. `pause_agent` and `resume_agent`
-control wakes/execution. `remove_agent` retires one mind without deleting its world actor. `agent_report` reads an agent's current report. `set_agent_model` changes its
-model. `list_agents` refreshes status. `stop_run` gracefully ends this harness run.
+`spawn_agent` creates a character mind in the currently connected world; no instance id is needed.
+Its spec requires `id`, accepts optional `displayName`, `tag`, `goal`, `persona`, and `voice`, and
+uses `spawn.at: { x, z, level }` for the creation tile. Attached existing instances usually have no
+default spawn, so they require `spawn.at`. In the shared hosted world, `spawn_agent` needs only `id`
+(plus optional `displayName`, `goal`, `persona`, or `voice`); the server places the actor, and
+`ask_admin` world edits are unavailable there. `assign_goal` changes one agent's outcome.
+`message_agent` sends guidance. `create_team` establishes a mission/coordinator. `pause_agent` and
+`resume_agent` control wakes/execution. `remove_agent` retires one mind without deleting its world
+actor. `agent_report` reads an agent's current report. `set_agent_model` changes its model.
+`list_agents` refreshes status. `stop_run` gracefully ends this harness run.
 World edits—spawning NPCs, placing locs or buildings, dropping loot, granting items or levels,
 healing, teleporting, and despawning—go through `ask_admin`; the admin reports back to your mailbox.
 Timed day/night or voting windows are driven by the external `harness phases` controller; do not

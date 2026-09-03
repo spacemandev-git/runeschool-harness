@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createBus } from '../bus/index.ts';
 import type { ModelProvider } from '../core/model.ts';
 import type { LiveRuntimeCommands, RunConfig, RuntimeView } from '../core/runtime.ts';
+import type { HostedWorldClient, HostedWorldStatus } from '../core/transport.ts';
 import { loadModelConfig } from '../models/config.ts';
 import { createMockProvider } from '../models/mock.ts';
 import { createModelRegistry } from '../models/registry.ts';
@@ -12,6 +13,17 @@ const NOW = Date.UTC(2026, 8, 2, 12, 34, 56, 789);
 
 function instance(id: string, kind = 'sandbox') {
   return { id, kind, tick: 9, state: 'running', entityCount: 2, realtime: true, pvp: false };
+}
+
+function hostedWorld(result: HostedWorldStatus | undefined | Error): HostedWorldClient {
+  return {
+    backendUrl: 'https://game.example/api',
+    async status() {
+      if (result instanceof Error) throw result;
+      return result;
+    },
+    async join() { throw new Error('not used'); },
+  };
 }
 
 function harness() {
@@ -193,6 +205,52 @@ test('connect builds an attach config and delegates through the stable runtime s
   expect(launcher.view.config()).toEqual({ live: true, world: 'attach' });
   await launcher.commands.directorSay('hello live runtime');
   expect(setup.runtimes[0]?.directorMessages).toEqual(['hello live runtime']);
+});
+
+test('connect selects the hosted world when backend status matches the instance', async () => {
+  const setup = harness();
+  const client = hostedWorld({ instanceId: 'live-world', status: 'ready', pvp: true });
+  const launcher = createCockpitLauncher({ ...setup.options, hostedWorld: client });
+
+  await launcher.connect(instance('live-world'));
+
+  expect(setup.configs[0]?.world).toEqual({
+    kind: 'hosted',
+    backendUrl: 'https://game.example/api',
+  });
+});
+
+test('connect keeps attach behavior when hosted status names another instance', async () => {
+  const setup = harness();
+  const launcher = createCockpitLauncher({
+    ...setup.options,
+    hostedWorld: hostedWorld({ instanceId: 'live-world', status: 'ready', pvp: true }),
+  });
+
+  await launcher.connect(instance('ordinary-world'));
+
+  expect(setup.configs[0]?.world).toEqual({
+    kind: 'attach',
+    instanceId: 'ordinary-world',
+    httpUrl: 'https://game.example/api/instances/ordinary-world',
+    wsUrl: 'wss://game.example/api/instances/ordinary-world/stream',
+    actors: [],
+  });
+});
+
+test('connect falls back to attach when hosted status discovery throws', async () => {
+  const setup = harness();
+  const launcher = createCockpitLauncher({
+    ...setup.options,
+    hostedWorld: hostedWorld(new Error('backend unavailable')),
+  });
+
+  await launcher.connect(instance('ordinary-world'));
+
+  expect(setup.configs[0]?.world).toMatchObject({
+    kind: 'attach',
+    instanceId: 'ordinary-world',
+  });
 });
 
 test('scenario provisioning and sandbox attachment carry the intended configs and stop the prior runtime', async () => {

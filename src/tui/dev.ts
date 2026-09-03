@@ -8,6 +8,7 @@ import { createAgentMind } from '../mind/index.ts';
 import { loadModelConfig } from '../models/config.ts';
 import { createModelRegistry } from '../models/registry.ts';
 import { createPromptLibrary } from '../prompts/index.ts';
+import { createHostedWorldClient } from '../transport/hostedWorld.ts';
 import { createCockpit, type Cockpit } from './app.ts';
 import { createCockpitLauncher } from './launcherRuntime.ts';
 import { createModelSelectionStore } from './modelSelectionStore.ts';
@@ -40,6 +41,7 @@ const backendUrl = runeschoolApiBackend.replace(/\/+$/, '');
 const mcpUrl = `${backendUrl}/mcp`;
 const uiUrl = uiUrlForBackend(backendUrl);
 const directory = createRuneSchoolWorldDirectory(backendUrl);
+const hostedWorld = createHostedWorldClient({ backendUrl });
 const bus = createBus();
 let cockpit: Cockpit | undefined;
 const models = createModelRegistry(loadModelConfig(), { bus });
@@ -66,6 +68,7 @@ const launcher = createCockpitLauncher({
   memoryFactory,
   mindFactory: createAgentMind,
   adminFactory: createAdmin,
+  hostedWorld,
   logDir,
   dataDir,
   initialModelSelections: persistedSelections,

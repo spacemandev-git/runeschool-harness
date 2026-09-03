@@ -4,6 +4,7 @@ import type { JsonValue } from '#protocol';
 import { createBus } from '../bus/index.ts';
 import {
   createMcpSession,
+  HostedWorldNotViaMcp,
   rebaseJoinUrls,
   SandboxNeedsPlayers,
   SpawnRequired
@@ -82,6 +83,15 @@ describe('rebaseJoinUrls', () => {
 });
 
 describe('createMcpSession provisioning', () => {
+  test('rejects hosted-world provisioning because hosted joins use REST', async () => {
+    const session = createMcpSession('http://mcp', createBus(), {
+      call: async () => { throw new Error('MCP must not be called'); }
+    });
+    const provision = session.provision({ kind: 'hosted', backendUrl: 'https://backend.test' }, []);
+    await expect(provision).rejects.toBeInstanceOf(HostedWorldNotViaMcp);
+    await expect(provision).rejects.toThrow('/world/live/join');
+  });
+
   test('rebases scenario join info from a remote MCP endpoint and warns exactly once', async () => {
     const bus = createBus();
     const session = createMcpSession('https://api.runeschool.dev/mcp', bus, {
@@ -217,7 +227,11 @@ describe('createMcpSession provisioning', () => {
     expect(calls.at(-1)?.args).toMatchObject({ spawn_at: { x: 8, z: 9, level: 0 } });
 
     const noDefault = createMcpSession('http://mcp', createBus(), { call: async () => ({}) });
-    await expect(noDefault.addPlayer('unknown', { tag: 'x' })).rejects.toBeInstanceOf(SpawnRequired);
+    const missingSpawn = noDefault.addPlayer('unknown', { tag: 'x' });
+    await expect(missingSpawn).rejects.toBeInstanceOf(SpawnRequired);
+    await expect(missingSpawn).rejects.toThrow(
+      'SpawnRequired("unknown"): the world has no default spawn tile; pass spawn.at = { x, z, level } in the agent spec'
+    );
     await expect(session.provision({ kind: 'sandbox', query: 'x', seed: 1 }, [])).rejects.toBeInstanceOf(SandboxNeedsPlayers);
 
     const broken = createMcpSession('http://mcp', createBus(), {

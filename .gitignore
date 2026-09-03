@@ -10,6 +10,7 @@ coverage/
 /runs/*
 !/runs/.gitkeep
 /data/agents/
+/data/identities/
 *.jsonl
 *.sqlite*
 *.control.json

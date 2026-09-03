@@ -51,9 +51,9 @@ All harness code imports the vocabulary through these two specifiers (never thro
 |---|---|---|
 | `src/core` | Public contracts (unchanged API surface; `core/reflex.ts`, `core/prompts.ts`, `core/percept.ts`, `core/actions.ts` restored to the full RuneSchool versions) | mixed |
 | `src/vendor` | Vendored packages | new |
-| `src/transport` | MCP session (`@modelcontextprotocol/sdk`), actor WebSocket link, defs reader | ported |
+| `src/transport` | MCP session (`@modelcontextprotocol/sdk`), hosted-world join (`hostedWorld.ts`), per-agent Ed25519 identities (`agentIdentity.ts`), actor WebSocket link, defs reader | ported + new |
 | `src/perception` | World model over the SDK fold, differ, summarizer (`renderSnapshot`, `renderDeltaLines`) | ported |
-| `src/runtime` | Orchestrator, agent runtime, runtime view/commands, world reads, mailbox, trace | ported + existing |
+| `src/runtime` | Orchestrator, credential resolution (`credentials.ts`), agent runtime, runtime view/commands, world reads, mailbox, trace | ported + existing + new |
 | `src/admin` | Admin (game master) persona and tools | ported |
 | `src/reflex` | DSL, rule actions, presets, tables, 30 built-in behaviours | ported + existing |
 | `src/mind` | Agent mind, tools, prompt builder, digest, salience | existing, small edits |
@@ -92,6 +92,9 @@ where they appear in ported files.
   `HarnessRuntime` when the operator connects to or spawns a world from the World tab, so the
   Director/Admin/Agents tabs and `/spawn` work against the hosted backend. Until a world is
   connected, commands report "connect to a RuneSchool instance from the World tab first".
+- Shared hosted worlds bypass MCP provisioning and `add_player`: the runtime reads hosted status
+  and joins each agent through its durable Ed25519 identity. MCP connection is optional there and
+  retained only for available director passthrough tools.
 
 ## Conventions
 

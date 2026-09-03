@@ -11,6 +11,7 @@ Usage (from the repository root):
   bun run start --sandbox lumbridge --agent miner --agent banker --team workers=miner,banker:"Gather ore"
   bun run start --resume <worldId> --agent agent
   bun run start --attach join.json --agent hero@hero
+  bun run start --hosted --agent bob="Duel alice"
   bun run start --daemon --scenario arena-island --agent hero="Survive"   # then: bun run start attach latest
 
 World (choose at most one; default --scenario goblin-menace):
@@ -18,6 +19,7 @@ World (choose at most one; default --scenario goblin-menace):
   --sandbox <query>       Create a sandbox from a region search
   --resume <worldId>      Resume a saved world
   --attach <json-file>    Attach using {instanceId,httpUrl,wsUrl,actors[],adminToken?}
+  --hosted                Join the backend's shared hosted world
   --seed <n>              World seed (default: 1)
   --pvp                   Enable PvP for new scenario/sandbox worlds
 
@@ -238,6 +240,7 @@ export function parseRunConfig(argv: readonly string[], env: Env = process.env):
     if (arg === '--scenario') { choose(arg); world = { kind: 'scenario', name: nonempty(next(), arg), seed }; }
     else if (arg === '--sandbox') { choose(arg); world = { kind: 'sandbox', query: nonempty(next(), arg), seed }; }
     else if (arg === '--resume') { choose(arg); world = { kind: 'resume', worldId: nonempty(next(), arg) }; }
+    else if (arg === '--hosted') { choose(arg); world = { kind: 'hosted', backendUrl: environment.runeschoolApiBackend }; }
     else if (arg === '--attach') {
       choose(arg);
       const path = next(); const raw = record(readJson(path, '--attach'), '--attach');
@@ -331,7 +334,7 @@ export function parseRunConfig(argv: readonly string[], env: Env = process.env):
     }
     const unresolvedScenarioSlot = index === 0 && world.kind === 'scenario'
       && useExistingSlot === true && tag === undefined;
-    if (!unresolvedScenarioSlot) tag ??= agent.id;
+    if (!unresolvedScenarioSlot && world.kind !== 'hosted') tag ??= agent.id;
     if (tag !== undefined) {
       if (tags.has(tag)) throw new Error(`Duplicate agent tag '${tag}'`);
       tags.add(tag);

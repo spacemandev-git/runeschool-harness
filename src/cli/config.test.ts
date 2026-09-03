@@ -46,6 +46,22 @@ describe('run config', () => {
     expect(overridden.uiUrl).toBe('https://cli.example/ui');
   });
 
+  test('parses the shared hosted world and rejects incompatible world flags', () => {
+    const config = parseRunConfig(['--hosted', '--agent', 'bob=Duel alice'], {
+      RUNESCHOOL_API_BACKEND: 'https://game.example/api/',
+    });
+    if ('help' in config || 'subcommand' in config) throw new Error('unexpected help');
+    expect(config.world).toEqual({ kind: 'hosted', backendUrl: 'https://game.example/api' });
+    expect(config.agents[0]).toMatchObject({ id: 'bob', goal: 'Duel alice' });
+    expect(config.agents[0]?.tag).toBeUndefined();
+    expect(() => parseRunConfig(['--hosted', '--pvp'], {})).toThrow(
+      '--pvp is only valid with --scenario or --sandbox',
+    );
+    expect(() => parseRunConfig(['--hosted', '--scenario', 'arena-island'], {})).toThrow(
+      '--hosted and --scenario are mutually exclusive',
+    );
+  });
+
   test('parses world, agent, team, operation, and URL flags', () => {
     const config = parseRunConfig([
       '--sandbox', 'lumbridge', '--seed', '42', '--pvp',

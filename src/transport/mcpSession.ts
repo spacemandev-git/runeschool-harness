@@ -40,9 +40,16 @@ export class SandboxNeedsPlayers extends Error {
   }
 }
 
+export class HostedWorldNotViaMcp extends Error {
+  constructor(readonly backendUrl: string) {
+    super(`HostedWorldNotViaMcp(${JSON.stringify(backendUrl)}): the shared hosted world is joined over REST (/world/live/join), not provisioned through MCP`);
+    this.name = 'HostedWorldNotViaMcp';
+  }
+}
+
 export class SpawnRequired extends Error {
   constructor(readonly instanceId: string) {
-    super(`SpawnRequired(${JSON.stringify(instanceId)}): addPlayer needs spawnAt and no default spawn is recorded`);
+    super(`SpawnRequired(${JSON.stringify(instanceId)}): the world has no default spawn tile; pass spawn.at = { x, z, level } in the agent spec`);
     this.name = 'SpawnRequired';
   }
 }
@@ -291,6 +298,7 @@ export function createMcpSession(
     },
     call: rawCall,
     async provision(selection: WorldSelection, players: readonly AddPlayerRequest[]): Promise<ProvisionedWorld> {
+      if (selection.kind === 'hosted') throw new HostedWorldNotViaMcp(selection.backendUrl);
       if (selection.kind === 'attach') {
         return await emitProvisioned({
           instanceId: selection.instanceId,

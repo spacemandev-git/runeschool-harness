@@ -24,13 +24,15 @@ export type WorldSelection =
   | { readonly kind: 'sandbox'; readonly query: string; readonly seed: number; readonly name?: string; readonly pvp?: boolean }
   | { readonly kind: 'resume'; readonly worldId: string }
   /** Attach to an already-running instance using credentials held elsewhere (e.g. from a config file). */
-  | { readonly kind: 'attach'; readonly instanceId: string; readonly httpUrl: string; readonly wsUrl: string; readonly actors: readonly ActorCredentials[]; /** Instance admin token; lets the admin persona act on a world this MCP session did not create. */ readonly adminToken?: string; /** Tile used by `addPlayer` when a request omits `spawnAt` (e.g. the first player's spawn of a sandbox created outside this session). */ readonly defaultSpawn?: TileCoord };
+  | { readonly kind: 'attach'; readonly instanceId: string; readonly httpUrl: string; readonly wsUrl: string; readonly actors: readonly ActorCredentials[]; /** Instance admin token; lets the admin persona act on a world this MCP session did not create. */ readonly adminToken?: string; /** Tile used by `addPlayer` when a request omits `spawnAt` (e.g. the first player's spawn of a sandbox created outside this session). */ readonly defaultSpawn?: TileCoord }
+  /** Join the backend's shared hosted world (`GET /world/live`) as wallet identities; no admin token is involved. */
+  | { readonly kind: 'hosted'; readonly backendUrl: string };
 
 export interface ProvisionedWorld {
   readonly instanceId: string;
   readonly httpUrl: string;
   readonly wsUrl: string;
-  readonly kind: 'scenario' | 'sandbox' | 'resumed' | 'attached';
+  readonly kind: 'scenario' | 'sandbox' | 'resumed' | 'attached' | 'hosted';
   /** Actor slots created at provisioning time (tag -> credentials). */
   readonly actors: readonly ActorCredentials[];
   /** Scenario document or region metadata for prompts. */
@@ -99,4 +101,38 @@ export interface DefsReader {
   /** `/defs/names` dictionaries. */
   names(): Promise<{ readonly items: Readonly<Record<string, string>>; readonly npcs: Readonly<Record<string, string>>; readonly locs?: Readonly<Record<string, string>> }>;
   region(regionId: number): Promise<JsonValue>;
+}
+
+/** Public readiness metadata of the backend's shared hosted world (`GET /world/live`). */
+export interface HostedWorldStatus {
+  readonly instanceId: string;
+  readonly status: string;
+  readonly name?: string;
+  readonly pvp: boolean;
+  readonly participantCount?: number;
+}
+
+/** A Solana-style Ed25519 identity an agent signs in with. The private key never leaves the store. */
+export interface AgentIdentity {
+  /** Base58-encoded 32-byte Ed25519 public key. */
+  readonly publicKey: string;
+  /** Sign the exact UTF-8 message; returns the 64-byte Ed25519 signature. */
+  sign(message: string): Promise<Uint8Array>;
+}
+
+/** Durable per-agent identities so a rejoin reuses the same hosted-world actor. */
+export interface AgentIdentityStore {
+  ensure(agentId: string): Promise<AgentIdentity>;
+}
+
+/**
+ * Hosted-world participation over REST: signed challenge (`/auth/challenge`, `/auth/verify`,
+ * kind `agent`) then `POST /world/live/join`, which mints or reuses that identity's actor. Bearer
+ * session tokens are used once and never surfaced; the returned actor credentials are the only output.
+ */
+export interface HostedWorldClient {
+  readonly backendUrl: string;
+  /** Undefined when the backend hosts no shared world (404 or non-JSON). */
+  status(): Promise<HostedWorldStatus | undefined>;
+  join(identity: AgentIdentity, options?: { readonly displayName?: string }): Promise<ActorCredentials>;
 }
