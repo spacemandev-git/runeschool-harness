@@ -96,6 +96,7 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
   const admin: ChatMessage[] = [{ role: 'assistant', content: '**Admin ready.** I can make changes to the world.' }];
   const coordinators = new Map<string, ChatMessage[]>([['alpha', []]]);
   let directorModel = 'fake-director-v1';
+  let agentDefaultModel = 'fake-agent-v1';
   const coordinatorModels = new Map<string, string>([['alpha', 'fake-coordinator-v1']]);
   const usage = new Map<string, { calls: number; prompt: number; completion: number; errors: number }>();
   let lastReport = 'Hero and Scout are moving to their objectives.';
@@ -128,6 +129,8 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
         fake: true, seed, credentials: '[redacted]', pulseMs: 600,
         models: {
           director: directorModel,
+          admin: 'fake-admin-v1',
+          agentDefault: agentDefaultModel,
           coordinators: Object.fromEntries(coordinatorModels),
           agents: Object.fromEntries([...agents].map(([id, agent]) => [id, agent.model]))
         }
@@ -219,6 +222,7 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
       if (agents.has(spec.id)) throw new Error(`agent already exists: ${spec.id}`);
       const at = spec.spawn?.at ?? { x: 3220, z: 3220, level: 0 };
       const agent = makeAgent(spec.id, spec.displayName ?? spec.id, nextEntity++, spec.team, at.x, at.z, spec.goal ?? 'Await instructions');
+      agent.model = agentDefaultModel;
       agents.set(agent.id, agent);
       bus.emit('agent.spawned', { agentId: agent.id, tag: agent.tag, entity: agent.entity, ...(agent.team === undefined ? {} : { team: agent.team }), displayName: agent.displayName });
       bus.emit('agent.snapshot', { agentId: agent.id, snapshot: agent.snapshot });
@@ -226,6 +230,8 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
     setModel(selection) {
       if (selection.role === 'director') {
         directorModel = selection.model;
+      } else if (selection.role === 'agent-default') {
+        agentDefaultModel = selection.model;
       } else if (selection.role === 'coordinator') {
         if (!coordinators.has(selection.team)) throw new Error(`unknown team: ${selection.team}`);
         coordinatorModels.set(selection.team, selection.model);

@@ -60,6 +60,8 @@ test('cockpit mounts, navigates, submits, commands, stops, and resizes', async (
 
   await setup.mockInput.typeText('/model director openai/director-model');
   setup.mockInput.pressEnter();
+  await setup.mockInput.typeText('/model agent-default openai/default-agent-model');
+  setup.mockInput.pressEnter();
   await setup.mockInput.typeText('/model coordinator alpha openai/coordinator-model');
   setup.mockInput.pressEnter();
   await setup.mockInput.typeText('/model agent hero openai/agent-model');
@@ -68,6 +70,7 @@ test('cockpit mounts, navigates, submits, commands, stops, and resizes', async (
   expect(fake.view.config()).toMatchObject({
     models: {
       director: 'openai/director-model',
+      agentDefault: 'openai/default-agent-model',
       coordinators: { alpha: 'openai/coordinator-model' }
     }
   });
@@ -108,6 +111,30 @@ test('every tab renders at compact dimensions', async () => {
     await cockpit.stop();
     await running;
   }
+});
+
+test('model bar shows the model relevant to each role tab', async () => {
+  const setup = await createTestRenderer({ width: 120, height: 30 });
+  const bus = createBus();
+  const fake = createFakeRuntime(bus);
+  const cockpit = createCockpit({ view: fake.view, commands: fake.commands, bus, renderer: setup.renderer });
+  const running = cockpit.start();
+
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain('model · director fake-director-v1');
+  cockpit.selectTab('Admin');
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain('model · admin fake-admin-v1');
+  cockpit.selectTab('Agents');
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain('model · new agent default fake-agent-v1');
+  cockpit.selectTab('Agent');
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain('model · hero fake-agent-v1 · default fake-agent-v1');
+
+  await cockpit.stop();
+  await running;
+  fake.stop();
 });
 
 test('q twice and /quit stop an owning cockpit', async () => {
@@ -167,6 +194,7 @@ test('help text lists lifecycle and model-selection commands', () => {
   expect(HELP_TEXT).toContain('/quit');
   expect(HELP_TEXT).toContain('/detach');
   expect(HELP_TEXT).toContain('/model director <model>');
+  expect(HELP_TEXT).toContain('/model agent-default <model>');
   expect(HELP_TEXT).toContain('/model coordinator <team> <model>');
   expect(HELP_TEXT).toContain('/model agent <agent> <model>');
   expect(HELP_TEXT).toContain('/world connect <instance>');

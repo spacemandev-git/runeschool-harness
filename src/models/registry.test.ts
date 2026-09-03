@@ -3,7 +3,7 @@ import { createBus } from '../bus/index.ts';
 import type { ModelConfig, ModelProvider } from '../core/model.ts';
 import { assistantText, createMockProvider } from './mock.ts';
 import { createModelRegistry, ModelAuthError, ModelResolveError } from './registry.ts';
-import { applyModelSelection } from './selection.ts';
+import { applyModelSelection, validateAndApplyModelSelection } from './selection.ts';
 
 function config(): ModelConfig {
   return {
@@ -35,6 +35,7 @@ describe('model registry', () => {
   test('applies director, coordinator, and agent model selections independently', () => {
     const registry = createModelRegistry(config(), { bus: createBus() });
     applyModelSelection(registry, { role: 'director', model: 'director-model' });
+    applyModelSelection(registry, { role: 'agent-default', model: 'default-agent-model' });
     applyModelSelection(registry, { role: 'coordinator', team: 'red', model: 'coordinator-model' });
     applyModelSelection(registry, { role: 'agent', agent: 'bob', model: 'agent-model' });
 
@@ -42,7 +43,58 @@ describe('model registry', () => {
     expect(registry.resolve('coordinator', 'red').model).toBe('coordinator-model');
     expect(registry.resolve('coordinator', 'blue').model).toBe('base');
     expect(registry.resolve('agent', 'bob').model).toBe('agent-model');
+    expect(registry.resolve('agent', 'charlie').model).toBe('default-agent-model');
     expect(registry.resolve('agent', 'alice').model).toBe('agent-config');
+  });
+
+  test('validates model selections against the resolved provider before applying them', async () => {
+    const discoverable: ModelProvider = {
+      ...createMockProvider({ id: 'one' }),
+      async listModels() { return ['base', 'known-model']; }
+    };
+    const registry = createModelRegistry(config(), {
+      bus: createBus(), providers: { one: discoverable }
+    });
+
+    await validateAndApplyModelSelection(registry, { role: 'director', model: ' known-model ' });
+    expect(registry.resolve('director').model).toBe('known-model');
+    await validateAndApplyModelSelection(registry, { role: 'agent-default', model: 'known-model' });
+    expect(registry.resolve('agent', 'new-agent').model).toBe('known-model');
+
+    await expect(validateAndApplyModelSelection(registry, {
+      role: 'director', model: 'invented-model'
+    })).rejects.toThrow("model 'invented-model' is not available from provider 'one'");
+    expect(registry.resolve('director').model).toBe('known-model');
+  });
+
+  test('does not apply a model selection when provider discovery fails', async () => {
+    const unavailable: ModelProvider = {
+      ...createMockProvider({ id: 'one' }),
+      async listModels() { throw new Error('catalog offline'); }
+    };
+    const registry = createModelRegistry(config(), {
+      bus: createBus(), providers: { one: unavailable }
+    });
+
+    await expect(validateAndApplyModelSelection(registry, {
+      role: 'director', model: 'unverified-model'
+    })).rejects.toThrow(
+      "could not verify model 'unverified-model' with provider 'one': catalog offline"
+    );
+    expect(registry.resolve('director').model).toBe('base');
+  });
+
+  test('rejects validation when a provider cannot list models', async () => {
+    const registry = createModelRegistry(config(), {
+      bus: createBus(), providers: { one: createMockProvider({ id: 'one' }) }
+    });
+
+    await expect(validateAndApplyModelSelection(registry, {
+      role: 'director', model: 'unverified-model'
+    })).rejects.toThrow(
+      "provider 'one' does not support model discovery; cannot verify 'unverified-model'"
+    );
+    expect(registry.resolve('director').model).toBe('base');
   });
 
   test('names missing providers in resolution errors', () => {

@@ -87,6 +87,10 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         focusedBackgroundColor: theme.tealDim, focusedTextColor: theme.paper,
         selectedBackgroundColor: theme.teal, selectedTextColor: theme.ink,
       });
+      const modelBar = new TextRenderable(activeRenderer, {
+        id: 'model-bar', width: '100%', height: 1, content: '',
+        fg: theme.paperMuted, bg: theme.ink, truncate: true,
+      });
       const body = new BoxRenderable(activeRenderer, { id: 'body', width: '100%', flexGrow: 1, flexDirection: 'column' });
       const status = createStatusBar(activeRenderer);
       const footer = new TextareaRenderable(activeRenderer, {
@@ -102,6 +106,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
       });
       root.add(header);
       root.add(tabs);
+      root.add(modelBar);
       root.add(body);
       root.add(status.root);
       root.add(footer);
@@ -147,6 +152,34 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         header.content = `RuneSchool cockpit${attached ? ' · attached' : ''} · run ${options.view.runId} · inst ${instance?.id ?? '—'} · tick ${instance?.tick ?? 0} · agents ${options.view.agents().length} · $tokens ${usage.prompt}/${usage.completion}`;
       }
 
+      function updateModelBar(): void {
+        const config = options.view.config();
+        const configRecord = typeof config === 'object' && config !== null && !Array.isArray(config)
+          ? config as Record<string, JsonValue>
+          : undefined;
+        const configuredModels = configRecord?.models;
+        const models = typeof configuredModels === 'object' && configuredModels !== null
+          && !Array.isArray(configuredModels)
+          ? configuredModels as Record<string, JsonValue>
+          : undefined;
+        const namedModel = (name: string): string => typeof models?.[name] === 'string'
+          ? models[name] as string
+          : '—';
+        const agentId = selectedAgentId();
+        const agentModel = agentId === undefined
+          ? '—'
+          : options.view.agents().find((agent) => agent.id === agentId)?.model ?? '—';
+
+        if (selectedTab === 0) modelBar.content = `model · director ${namedModel('director')}`;
+        else if (selectedTab === 1) modelBar.content = `model · admin ${namedModel('admin')}`;
+        else if (selectedTab === 2) modelBar.content = `model · new agent default ${namedModel('agentDefault')}`;
+        else if (selectedTab === 3) {
+          modelBar.content = `model · ${agentId ?? 'current agent'} ${agentModel} · default ${namedModel('agentDefault')}`;
+        } else {
+          modelBar.content = `models · director ${namedModel('director')} · admin ${namedModel('admin')} · agent default ${namedModel('agentDefault')}`;
+        }
+      }
+
       function updateFooterTarget(): void {
         if (selectedTab === 0) footer.placeholder = 'message the director…';
         else if (selectedTab === 1) footer.placeholder = 'Tell the admin what to change in the world…';
@@ -161,6 +194,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         if (shown !== undefined) body.remove(shown.root);
         shown = next;
         body.add(next.root);
+        updateModelBar();
         updateFooterTarget();
         if (focusIndex === 1) next.focus();
       }
@@ -217,6 +251,13 @@ export function createCockpit(options: CockpitOptions): Cockpit {
           status.setHint(`director model → ${directorModel[1]}`);
           return;
         }
+        const agentDefaultModel = text.match(/^\/model\s+agent-default\s+(\S+)$/);
+        if (agentDefaultModel?.[1] !== undefined) {
+          if (options.commands.setModel === undefined) throw new Error('this runtime does not support model selection');
+          await options.commands.setModel({ role: 'agent-default', model: agentDefaultModel[1] });
+          status.setHint(`new agent default model → ${agentDefaultModel[1]}`);
+          return;
+        }
         const coordinatorModel = text.match(/^\/model\s+coordinator\s+(\S+)\s+(\S+)$/);
         if (coordinatorModel?.[1] !== undefined && coordinatorModel[2] !== undefined) {
           if (options.commands.setModel === undefined) throw new Error('this runtime does not support model selection');
@@ -232,7 +273,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
           return;
         }
         if (/^\/model(\s|$)/.test(text)) {
-          throw new Error('usage: /model director <model> | /model coordinator <team> <model> | /model agent <agent> <model>');
+          throw new Error('usage: /model director <model> | /model agent-default <model> | /model coordinator <team> <model> | /model agent <agent> <model>');
         }
         if (text === '/world refresh') {
           await worldScreen.refreshRemote();
@@ -366,6 +407,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
       const offBus = options.bus.onAny((event) => { if (event.type.startsWith('agent.') || event.type.startsWith('model.') || event.type.startsWith('team.')) dirty = true; });
       const refresh = (): void => {
         updateHeader();
+        updateModelBar();
         if (dirty) {
           agentsScreen.refresh();
           agentScreen.refresh();

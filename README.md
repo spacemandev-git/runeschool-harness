@@ -156,19 +156,29 @@ model calls and can be made independently for the director, each team coordinato
 
 ```text
 /model director openai/gpt-5.5-pro
+/model agent-default openai/gpt-5.5-mini
 /model coordinator alpha anthropic/claude-sonnet-4.5
 /model agent scout qwen/qwen3-coder
 ```
 
-A host wires the cockpit command to its model registry with `applyModelSelection`:
+`agent-default` sets the agent-role fallback used by newly created agents. Explicit per-agent
+configuration or a later `/model agent <agent> <model>` assignment still takes precedence.
+
+Validated cockpit selections are persisted across restarts in
+`$XDG_CONFIG_HOME/runeschool-harness/model-selections.json` (or
+`~/.config/runeschool-harness/model-selections.json` when `XDG_CONFIG_HOME` is unset).
+
+A host wires the cockpit command to its model registry with `validateAndApplyModelSelection`.
+This queries the resolved provider's model catalogue and only applies an advertised model; an
+unreachable provider or unknown slug leaves the existing assignment unchanged:
 
 ```ts
-import { applyModelSelection } from "@runeschool/harness/models";
+import { validateAndApplyModelSelection } from "@runeschool/harness/models";
 
 const commands = {
   // ...the rest of RuntimeCommands
-  setModel(selection) {
-    applyModelSelection(models, selection);
+  async setModel(selection) {
+    await validateAndApplyModelSelection(models, selection);
   },
 };
 ```

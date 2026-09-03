@@ -1,65 +1,40 @@
 import { createBus } from '../bus/index.ts';
-import type { RuntimeCommands, RuntimeView } from '../core/runtime.ts';
 import { loadHarnessEnvironment } from '../environment.ts';
+import { loadModelConfig } from '../models/config.ts';
+import { createModelRegistry } from '../models/registry.ts';
 import { createCockpit, type Cockpit } from './app.ts';
-import { createRuneSchoolWorldDirectory, type BackendInstanceSummary } from './worldDirectory.ts';
+import { createWorldBrowserRuntime } from './launcherRuntime.ts';
+import { createModelSelectionStore } from './modelSelectionStore.ts';
+import { createRuneSchoolWorldDirectory } from './worldDirectory.ts';
 
 const { runeschoolApiBackend } = loadHarnessEnvironment();
 const directory = createRuneSchoolWorldDirectory(runeschoolApiBackend);
 const bus = createBus();
-const startedAt = Date.now();
-let activeInstance: BackendInstanceSummary | undefined;
 let cockpit: Cockpit | undefined;
-
-const unavailable = async (): Promise<never> => {
-  throw new Error('connect to a RuneSchool instance from the World tab first');
-};
-
-const view: RuntimeView = {
-  runId: `cockpit-${process.pid}`,
-  startedAt,
-  get instance() {
-    const instance = activeInstance;
-    if (instance === undefined) return undefined;
-    return {
-      id: instance.id,
-      httpUrl: `${directory.backendUrl}/instances/${encodeURIComponent(instance.id)}`,
-      kind: instance.kind,
-      tick: instance.tick,
-    };
-  },
-  agents: () => [],
-  teams: () => [],
-  agentSnapshot: () => undefined,
-  agentReflexes: () => undefined,
-  agentTranscript: () => [],
-  directorTranscript: () => [],
-  adminTranscript: () => [],
-  coordinatorTranscript: () => [],
-  usage: () => [],
-  config: () => ({ backend: directory.backendUrl, mode: 'world-browser' }),
-};
-
-const commands: RuntimeCommands = {
-  directorSay: unavailable,
-  adminSay: unavailable,
-  agentSay: unavailable,
-  coordinatorSay: unavailable,
-  setAgentGoal: unavailable,
-  pauseAgent() { throw new Error('no harness agent is connected'); },
-  resumeAgent() { throw new Error('no harness agent is connected'); },
-  agentCommand: unavailable,
-  spawnAgent: unavailable,
-  async stop() { await cockpit?.stop(); },
-};
+const models = createModelRegistry(loadModelConfig(), { bus });
+const modelSelectionStore = createModelSelectionStore();
+let persistedSelections = [] as Awaited<ReturnType<typeof modelSelectionStore.load>>;
+let persistenceWarning: string | undefined;
+try {
+  persistedSelections = await modelSelectionStore.load();
+} catch (error) {
+  persistenceWarning = error instanceof Error ? error.message : String(error);
+}
+const runtime = createWorldBrowserRuntime({
+  backendUrl: directory.backendUrl,
+  models,
+  initialModelSelections: persistedSelections,
+  async onModelSelected(selection) { await modelSelectionStore.save(selection); },
+  async onStop() { await cockpit?.stop(); },
+});
 
 cockpit = createCockpit({
-  view,
-  commands,
+  view: runtime.view,
+  commands: runtime.commands,
   bus,
   worldDirectory: directory,
   onWorldConnect(instance) {
-    activeInstance = instance;
+    runtime.connect(instance);
     bus.emit('world.provisioned', {
       instanceId: instance.id,
       httpUrl: `${directory.backendUrl}/instances/${encodeURIComponent(instance.id)}`,
@@ -67,7 +42,9 @@ cockpit = createCockpit({
       kind: instance.kind === 'scenario' ? 'scenario' : 'sandbox',
     });
   },
-  statusHint: `backend ${directory.backendUrl}`,
+  statusHint: persistenceWarning === undefined
+    ? `backend ${directory.backendUrl}`
+    : `model persistence warning: ${persistenceWarning}`,
 });
 
 cockpit.selectTab('World');

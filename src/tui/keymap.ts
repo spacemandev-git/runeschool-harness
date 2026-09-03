@@ -37,6 +37,7 @@ export const HELP_TEXT = [
   '/cmd <agent> <type> <json>',
   '/spawn <json AgentSpec>',
   '/model director <model>',
+  '/model agent-default <model>',
   '/model coordinator <team> <model>',
   '/model agent <agent> <model>',
   '/world refresh',

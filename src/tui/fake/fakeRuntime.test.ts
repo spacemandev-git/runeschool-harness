@@ -23,12 +23,18 @@ test('pauseAgent is reflected in agents()', () => {
 test('model selections are reflected in runtime views', async () => {
   const fake = createFakeRuntime(createBus(), { seed: 1 });
   await fake.commands.setModel?.({ role: 'director', model: 'director-two' });
+  await fake.commands.setModel?.({ role: 'agent-default', model: 'agent-default-two' });
   await fake.commands.setModel?.({ role: 'coordinator', team: 'alpha', model: 'coordinator-two' });
   await fake.commands.setModel?.({ role: 'agent', agent: 'hero', model: 'agent-two' });
+  await fake.commands.spawnAgent({ id: 'new-agent' });
 
   expect(fake.view.config()).toMatchObject({
-    models: { director: 'director-two', coordinators: { alpha: 'coordinator-two' } }
+    models: {
+      director: 'director-two', admin: 'fake-admin-v1', agentDefault: 'agent-default-two',
+      coordinators: { alpha: 'coordinator-two' }
+    }
   });
   expect(fake.view.teams()[0]?.coordinatorModel).toBe('coordinator-two');
   expect(fake.view.agents().find((agent) => agent.id === 'hero')?.model).toBe('agent-two');
+  expect(fake.view.agents().find((agent) => agent.id === 'new-agent')?.model).toBe('agent-default-two');
 });

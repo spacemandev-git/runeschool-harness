@@ -57,6 +57,7 @@ export interface RuntimeView {
 /** A cockpit-selectable model assignment. Coordinators are addressed by team. */
 export type ModelSelection =
   | { readonly role: 'director'; readonly model: string }
+  | { readonly role: 'agent-default'; readonly model: string }
   | { readonly role: 'coordinator'; readonly team: TeamId; readonly model: string }
   | { readonly role: 'agent'; readonly agent: AgentId; readonly model: string };
 
@@ -75,7 +76,7 @@ export interface RuntimeCommands {
   spawnAgent(spec: AgentSpec): Promise<void>;
   /** Dynamically remove one mind/runtime while leaving its world actor untouched. */
   removeAgent?(agentId: AgentId, reason?: string): Promise<{ readonly removed: boolean }>;
-  /** Change the model used by the director, a team coordinator, or an agent. */
+  /** Change the model used by the director, new/default agents, a team coordinator, or an agent. */
   setModel?(selection: ModelSelection): void | Promise<void>;
   /** @deprecated Use {@link setModel} for cockpit-visible model assignments. */
   setAgentModel?(agentId: AgentId, role: ModelRole, spec: Partial<ModelSpec>): void;
