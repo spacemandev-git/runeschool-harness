@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createBus } from '../bus/index.ts';
 import { CONTROL_COMMAND_METHODS } from '../core/control.ts';
-import type { RuntimeView } from '../core/runtime.ts';
+import type { ModelSelection, RuntimeView } from '../core/runtime.ts';
 import { createFakeRuntime } from '../tui/fake/fakeRuntime.ts';
 import { connectControl } from './client.ts';
 import { createControlServer } from './server.ts';
@@ -42,6 +42,9 @@ describe('control server and client', () => {
     const commands = {
       ...fake.commands,
       async removeAgent(agentId: string) { controlCalls.push(`remove:${agentId}`); return { removed: true }; },
+      setModel(selection: ModelSelection) {
+        controlCalls.push(`selection:${selection.role}:${selection.model}`);
+      },
       setAgentModel(agentId: string, role: string, spec: { model?: string }) {
         controlCalls.push(`model:${agentId}:${role}:${spec.model ?? ''}`);
       },
@@ -90,10 +93,13 @@ describe('control server and client', () => {
         expect(fake.view.agents().find((agent) => agent.id === 'hero')?.goal).toBe('Test the control plane');
         await expect(client.commands.setAgentGoal('missing', 'fail')).rejects.toThrow('unknown agent: missing');
         expect(await client.commands.removeAgent!('hero', 'done')).toEqual({ removed: true });
+        await client.commands.setModel({ role: 'coordinator', team: 'alpha', model: 'team-model' });
         client.commands.setAgentModel!('hero', 'agent', { model: 'rival' });
         await client.commands.createTeam!('red', 'win', ['hero']);
-        await waitFor(() => controlCalls.length === 3);
-        expect(controlCalls).toEqual(['remove:hero', 'model:hero:agent:rival', 'team:red']);
+        await waitFor(() => controlCalls.length === 4);
+        expect(controlCalls).toEqual([
+          'remove:hero', 'selection:coordinator:team-model', 'model:hero:agent:rival', 'team:red'
+        ]);
       } finally {
         await client.close();
       }
@@ -122,7 +128,9 @@ describe('control server and client', () => {
   });
 
   test('control allow-list includes dynamic agent and team operations', () => {
-    expect(CONTROL_COMMAND_METHODS).toEqual(expect.arrayContaining(['removeAgent', 'setAgentModel', 'createTeam']));
+    expect(CONTROL_COMMAND_METHODS).toEqual(expect.arrayContaining([
+      'removeAgent', 'setModel', 'setAgentModel', 'createTeam'
+    ]));
   });
 
   test('client detach leaves the run serving another client', async () => {

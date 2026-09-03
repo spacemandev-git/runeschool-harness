@@ -228,6 +228,9 @@ export async function connectControl(
       if (reason !== undefined) args.push(reason);
       return await command('removeAgent', args) as unknown as { readonly removed: boolean };
     },
+    setModel(selection) {
+      return command('setModel', [selection as unknown as JsonValue]).then(() => undefined);
+    },
     setAgentModel(agentId, role, spec) {
       return command('setAgentModel', [agentId, role, spec as unknown as JsonValue]).then(() => undefined);
     },

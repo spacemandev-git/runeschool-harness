@@ -1,7 +1,7 @@
 /**
  * Model contracts. Every LLM call in the harness goes through a {@link ModelProvider} resolved by
  * the {@link ModelRegistry} for a role (and optionally a specific agent). The wire shape is the
- * OpenAI chat-completions dialect because Nous Portal speaks it; other providers adapt to it.
+ * OpenAI chat-completions dialect so any compatible router or inference server can be used.
  */
 import type { JsonValue } from '#protocol';
 import type { AgentId, ModelRole } from './types.ts';
@@ -82,8 +82,10 @@ export interface UsageByKey {
 }
 
 export interface ModelRegistry {
-  /** Role default, overridable per agent. Throws if no provider is configured. */
+  /** Role default, overridable globally and per target. Throws if no provider is configured. */
   resolve(role: ModelRole, agentId?: AgentId): ResolvedModel;
+  setRoleOverride(role: ModelRole, spec: Partial<ModelSpec>): void;
+  clearRoleOverride(role: ModelRole): void;
   setOverride(agentId: AgentId, role: ModelRole, spec: Partial<ModelSpec>): void;
   clearOverride(agentId: AgentId, role?: ModelRole): void;
   /** Convenience: resolve + call + account usage + emit `model.request`/`model.response` on the bus. */

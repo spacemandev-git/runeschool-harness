@@ -15,6 +15,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./environment": "./src/environment.ts",
     "./core": "./src/core/index.ts",
     "./models": "./src/models/index.ts",
     "./memory": "./src/memory/index.ts",

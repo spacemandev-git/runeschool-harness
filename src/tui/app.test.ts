@@ -57,6 +57,22 @@ test('cockpit mounts, navigates, submits, commands, stops, and resizes', async (
   expect(fake.view.agents().find((agent) => agent.id === 'hero')?.state).toBe('paused');
   await setup.waitForFrame((frame) => frame.includes('paused'));
 
+  await setup.mockInput.typeText('/model director openai/director-model');
+  setup.mockInput.pressEnter();
+  await setup.mockInput.typeText('/model coordinator alpha openai/coordinator-model');
+  setup.mockInput.pressEnter();
+  await setup.mockInput.typeText('/model agent hero openai/agent-model');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(30);
+  expect(fake.view.config()).toMatchObject({
+    models: {
+      director: 'openai/director-model',
+      coordinators: { alpha: 'openai/coordinator-model' }
+    }
+  });
+  expect(fake.view.teams()[0]?.coordinatorModel).toBe('openai/coordinator-model');
+  expect(fake.view.agents().find((agent) => agent.id === 'hero')?.model).toBe('openai/agent-model');
+
   await setup.mockInput.typeText('/admin heal hero');
   setup.mockInput.pressEnter();
   await Bun.sleep(350);
@@ -145,8 +161,11 @@ test('attached q and /detach detach without stopping the run', async () => {
   }
 });
 
-test('help text lists q, /quit, and /detach', () => {
+test('help text lists lifecycle and model-selection commands', () => {
   expect(HELP_TEXT).toContain('q');
   expect(HELP_TEXT).toContain('/quit');
   expect(HELP_TEXT).toContain('/detach');
+  expect(HELP_TEXT).toContain('/model director <model>');
+  expect(HELP_TEXT).toContain('/model coordinator <team> <model>');
+  expect(HELP_TEXT).toContain('/model agent <agent> <model>');
 });

@@ -125,7 +125,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
       footer.onContentChange = () => {
         if (selectedTab !== 5) return;
         const value = footer.plainText.trim();
-        const isCommand = /^\/(admin|goal|say|pause|resume|cmd|spawn|stop|quit|detach|help)(\s|$)/.test(value);
+        const isCommand = /^\/(admin|goal|say|pause|resume|cmd|spawn|model|stop|quit|detach|help)(\s|$)/.test(value);
         if (value === '') traceScreen.setFilter('');
         else if (value.startsWith('/') && !isCommand) traceScreen.setFilter(value);
       };
@@ -145,7 +145,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         else if (selectedTab === 1) footer.placeholder = 'Tell the admin what to change in the world…';
         else if (selectedTab === 3) footer.placeholder = `message ${selectedAgentId() ?? 'agent'}…`;
         else if (selectedTab === 5) footer.placeholder = '/prefix to filter, or enter a command…';
-        else footer.placeholder = 'enter /admin, /goal, /say, /pause, /resume, /cmd, /spawn, /stop, /quit, /detach, or /help…';
+        else footer.placeholder = 'enter /model, /goal, /say, /pause, /resume, /cmd, /spawn, /stop, /quit, /detach, or /help…';
       }
 
       function showScreen(): void {
@@ -203,6 +203,30 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         }
         const spawn = text.match(/^\/spawn\s+([\s\S]+)$/);
         if (spawn?.[1] !== undefined) { await options.commands.spawnAgent(parseObject(spawn[1]) as unknown as AgentSpec); return; }
+        const directorModel = text.match(/^\/model\s+director\s+(\S+)$/);
+        if (directorModel?.[1] !== undefined) {
+          if (options.commands.setModel === undefined) throw new Error('this runtime does not support model selection');
+          await options.commands.setModel({ role: 'director', model: directorModel[1] });
+          status.setHint(`director model → ${directorModel[1]}`);
+          return;
+        }
+        const coordinatorModel = text.match(/^\/model\s+coordinator\s+(\S+)\s+(\S+)$/);
+        if (coordinatorModel?.[1] !== undefined && coordinatorModel[2] !== undefined) {
+          if (options.commands.setModel === undefined) throw new Error('this runtime does not support model selection');
+          await options.commands.setModel({ role: 'coordinator', team: coordinatorModel[1], model: coordinatorModel[2] });
+          status.setHint(`${coordinatorModel[1]} coordinator model → ${coordinatorModel[2]}`);
+          return;
+        }
+        const agentModel = text.match(/^\/model\s+agent\s+(\S+)\s+(\S+)$/);
+        if (agentModel?.[1] !== undefined && agentModel[2] !== undefined) {
+          if (options.commands.setModel === undefined) throw new Error('this runtime does not support model selection');
+          await options.commands.setModel({ role: 'agent', agent: agentModel[1], model: agentModel[2] });
+          status.setHint(`${agentModel[1]} model → ${agentModel[2]}`);
+          return;
+        }
+        if (/^\/model(\s|$)/.test(text)) {
+          throw new Error('usage: /model director <model> | /model coordinator <team> <model> | /model agent <agent> <model>');
+        }
         if (text === '/stop') { await options.commands.stop('operator'); return; }
         if (text === '/quit') {
           await options.commands.stop('operator');
@@ -223,14 +247,14 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         const text = footer.plainText.trim();
         if (text.length === 0) return;
         footer.setText('');
-        if (/^\/(admin|goal|say|pause|resume|cmd|spawn|stop|quit|detach|help)(\s|$)/.test(text)) await runCommand(() => consoleCommand(text));
+        if (/^\/(admin|goal|say|pause|resume|cmd|spawn|model|stop|quit|detach|help)(\s|$)/.test(text)) await runCommand(() => consoleCommand(text));
         else if (selectedTab === 0) await runCommand(() => options.commands.directorSay(text));
         else if (selectedTab === 1) await runCommand(() => options.commands.adminSay(text));
         else if (selectedTab === 3) {
           const id = selectedAgentId();
           if (id === undefined) status.setError('no agent selected');
           else await runCommand(() => options.commands.agentSay(id, text));
-        } else if (selectedTab === 5 && text.startsWith('/') && !/^\/(admin|goal|say|pause|resume|cmd|spawn|stop|quit|detach|help)(\s|$)/.test(text)) {
+        } else if (selectedTab === 5 && text.startsWith('/') && !/^\/(admin|goal|say|pause|resume|cmd|spawn|model|stop|quit|detach|help)(\s|$)/.test(text)) {
           traceScreen.setFilter(text);
           status.setError(undefined);
           status.setHint(`trace filter /${traceScreen.filter()}`);

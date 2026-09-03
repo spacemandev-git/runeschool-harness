@@ -71,7 +71,7 @@ export function createCoordinator(team: CoordinatorTeam, deps: CoordinatorDeps):
   const byName = new Map(tools.map((tool) => [tool.definition.name, tool]));
   let directorNotes: string[] = [];
   const context = createContextManager({
-    role: 'coordinator', models: deps.models, estimator: charEstimator,
+    role: 'coordinator', agentId: team.id, models: deps.models, estimator: charEstimator,
     budget: { maxPromptTokens: 18_000, compactAtTokens: 13_000, keepTurns: 6, recallLimit: 0 }, bus: deps.bus, tools: definitions,
     systemPrompt: () => deps.prompts.render('coordinator-system', {
       team: team.id,
@@ -96,7 +96,9 @@ export function createCoordinator(team: CoordinatorTeam, deps: CoordinatorDeps):
     context.push({ role: 'user', content: [...inbound, text].filter(Boolean).join('\n') });
     let calls = 0;
     while (calls < 30 && !disposed) {
-      const response = await deps.models.chat('coordinator', { messages: context.messages(), tools: definitions, toolChoice: 'auto' });
+      const response = await deps.models.chat('coordinator', {
+        messages: context.messages(), tools: definitions, toolChoice: 'auto'
+      }, { agentId: team.id });
       context.push(response.message);
       deps.bus.emit('coordinator.turn', { teamId: team.id, message: response.message, ...(response.usage === undefined ? {} : { usage: response.usage }) });
       const requested = response.message.toolCalls ?? [];

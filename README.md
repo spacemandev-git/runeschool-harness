@@ -72,6 +72,7 @@ LLM, prompts, memory, tool arguments, events, and other agents as untrusted inpu
 Useful entry points are:
 
 - `@runeschool/harness/core` — public contracts
+- `@runeschool/harness/environment` — generic router and RuneSchool backend environment settings
 - `@runeschool/harness/models` — model config and providers
 - `@runeschool/harness/memory` — SQLite memory
 - `@runeschool/harness/mind` — agent deliberation loop
@@ -83,8 +84,28 @@ Useful entry points are:
 
 ## Model credentials
 
-Copy `.env.example` only as a reference. Do not commit `.env` files. API keys are named by
-environment variable in configuration and resolved at runtime:
+Copy `.env.example` to `.env` and provide any OpenAI-compatible endpoint. Bun loads `.env`
+automatically; other hosts can inject the same variables through their secret manager:
+
+```dotenv
+ROUTER_API_BASE=https://your-router.example/v1
+ROUTER_API_KEY=replace-with-your-router-key
+ROUTER_MODEL=openai/gpt-5.5-pro
+RUNESCHOOL_API_BACKEND=http://127.0.0.1:7800
+```
+
+The default model provider is named `router`. `ROUTER_API_KEY` is optional for local endpoints
+that do not require authentication. It is resolved only when the provider is constructed and is
+never included in displayable runtime config. A host can read the non-secret endpoint settings,
+including the RuneSchool server base URL, with:
+
+```ts
+import { loadHarnessEnvironment } from '@runeschool/harness/environment';
+
+const { runeschoolApiBackend } = loadHarnessEnvironment();
+```
+
+Custom model configuration can still name API keys by environment variable:
 
 ```json
 {
@@ -100,6 +121,30 @@ environment variable in configuration and resolved at runtime:
 
 Literal credential-shaped headers are rejected. For providers that require a custom auth header,
 use `headerEnv`, for example `{ "x-api-key": "PROVIDER_API_KEY" }`.
+
+### Cockpit model selection
+
+The terminal cockpit accepts model slugs from the configured router. Changes apply to subsequent
+model calls and can be made independently for the director, each team coordinator, and each agent:
+
+```text
+/model director openai/gpt-5.5-pro
+/model coordinator alpha anthropic/claude-sonnet-4.5
+/model agent scout qwen/qwen3-coder
+```
+
+A host wires the cockpit command to its model registry with `applyModelSelection`:
+
+```ts
+import { applyModelSelection } from '@runeschool/harness/models';
+
+const commands = {
+  // ...the rest of RuntimeCommands
+  setModel(selection) {
+    applyModelSelection(models, selection);
+  }
+};
+```
 
 ## Repository boundaries
 

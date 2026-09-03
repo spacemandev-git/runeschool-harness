@@ -16,6 +16,7 @@ describe('coordinator', () => {
     const spec = { provider: 'mock', model: 'm' };
     const config: ModelConfig = { providers: { mock: { kind: 'mock' } }, roles: { director: spec, coordinator: spec, agent: spec, summarizer: spec, admin: spec } };
     const models = createModelRegistry(config, { bus, providers: { mock } });
+    models.setOverride('red', 'coordinator', { model: 'red-coordinator-model' });
     const goals: string[] = [];
     const agent = {
       id: 'hero', spec: { id: 'hero', team: 'red' }, tag: 'hero', entity: 1, team: 'red', state: 'idle',
@@ -29,6 +30,7 @@ describe('coordinator', () => {
     });
     for (let index = 0; index < 100 && bus.history({ prefix: 'team.report' }).length === 0; index++) await Bun.sleep(1);
     expect(goals).toEqual(['walk east']);
+    expect(mock.requests[0]?.model).toBe('red-coordinator-model');
     expect(bus.history({ prefix: 'team.report' })[0]?.data).toEqual({ teamId: 'red', text: 'assigned' });
     expect(boxes.drain('director')[0]?.text).toBe('assigned');
     coordinator.dispose();

@@ -95,6 +95,8 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
   const director: ChatMessage[] = [{ role: 'assistant', content: '**World provisioned.** Three agents are online.' }];
   const admin: ChatMessage[] = [{ role: 'assistant', content: '**Admin ready.** I can make changes to the world.' }];
   const coordinators = new Map<string, ChatMessage[]>([['alpha', []]]);
+  let directorModel = 'fake-director-v1';
+  const coordinatorModels = new Map<string, string>([['alpha', 'fake-coordinator-v1']]);
   const usage = new Map<string, { calls: number; prompt: number; completion: number; errors: number }>();
   let lastReport = 'Hero and Scout are moving to their objectives.';
 
@@ -105,7 +107,7 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
     activity: agent.activity, ...(agent.behaviour === undefined ? {} : { behaviour: agent.behaviour }),
     ...(agent.lastWakeAt === undefined ? {} : { lastWakeAt: agent.lastWakeAt }), turns: agent.turns,
   }));
-  const teams = (): TeamSummary[] => [{ id: 'alpha', mission: 'Explore safely and report useful discoveries.', agents: ['hero', 'scout'], coordinatorModel: 'fake-coordinator-v1', lastReport }];
+  const teams = (): TeamSummary[] => [{ id: 'alpha', mission: 'Explore safely and report useful discoveries.', agents: ['hero', 'scout'], coordinatorModel: coordinatorModels.get('alpha') ?? 'fake-coordinator-v1', lastReport }];
   const usageRows = (): UsageByKey[] => [...usage].map(([key, value]) => ({ key, calls: value.calls, usage: { promptTokens: value.prompt, completionTokens: value.completion, totalTokens: value.prompt + value.completion }, errors: value.errors }));
 
   const view: RuntimeView = {
@@ -121,7 +123,16 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
     adminTranscript() { return admin.slice(); },
     coordinatorTranscript(team) { return coordinators.get(team)?.slice() ?? []; },
     usage: usageRows,
-    config() { return { fake: true, seed, credentials: '[redacted]', pulseMs: 600 }; },
+    config() {
+      return {
+        fake: true, seed, credentials: '[redacted]', pulseMs: 600,
+        models: {
+          director: directorModel,
+          coordinators: Object.fromEntries(coordinatorModels),
+          agents: Object.fromEntries([...agents].map(([id, agent]) => [id, agent.model]))
+        }
+      };
+    },
   };
 
   const later = (delay: number, callback: () => void): Promise<void> => new Promise((resolve) => {
@@ -211,6 +222,20 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
       agents.set(agent.id, agent);
       bus.emit('agent.spawned', { agentId: agent.id, tag: agent.tag, entity: agent.entity, ...(agent.team === undefined ? {} : { team: agent.team }), displayName: agent.displayName });
       bus.emit('agent.snapshot', { agentId: agent.id, snapshot: agent.snapshot });
+    },
+    setModel(selection) {
+      if (selection.role === 'director') {
+        directorModel = selection.model;
+      } else if (selection.role === 'coordinator') {
+        if (!coordinators.has(selection.team)) throw new Error(`unknown team: ${selection.team}`);
+        coordinatorModels.set(selection.team, selection.model);
+      } else {
+        getAgent(selection.agent).model = selection.model;
+      }
+      bus.emit('log', {
+        level: 'info', scope: 'models',
+        message: `selected ${selection.model} for ${selection.role}`
+      });
     },
     async stop(reason) {
       stopTimers();

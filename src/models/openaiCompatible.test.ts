@@ -15,7 +15,7 @@ describe('OpenAI-compatible provider', () => {
   test('sends exact headers and optional body fields', async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     const provider = createOpenAiCompatibleProvider({
-      id: 'nous',
+      id: 'router',
       baseUrl: 'https://example.test/v1/',
       headers: { 'x-extra': 'yes' },
       fetch: fakeFetch(async (url, init) => {

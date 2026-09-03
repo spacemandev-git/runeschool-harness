@@ -54,6 +54,12 @@ export interface RuntimeView {
   config(): JsonValue;
 }
 
+/** A cockpit-selectable model assignment. Coordinators are addressed by team. */
+export type ModelSelection =
+  | { readonly role: 'director'; readonly model: string }
+  | { readonly role: 'coordinator'; readonly team: TeamId; readonly model: string }
+  | { readonly role: 'agent'; readonly agent: AgentId; readonly model: string };
+
 export interface RuntimeCommands {
   /** Send a chat message to the director (returns when its turn completes). */
   directorSay(text: string): Promise<void>;
@@ -69,6 +75,9 @@ export interface RuntimeCommands {
   spawnAgent(spec: AgentSpec): Promise<void>;
   /** Dynamically remove one mind/runtime while leaving its world actor untouched. */
   removeAgent?(agentId: AgentId, reason?: string): Promise<{ readonly removed: boolean }>;
+  /** Change the model used by the director, a team coordinator, or an agent. */
+  setModel?(selection: ModelSelection): void | Promise<void>;
+  /** @deprecated Use {@link setModel} for cockpit-visible model assignments. */
   setAgentModel?(agentId: AgentId, role: ModelRole, spec: Partial<ModelSpec>): void;
   createTeam?(id: TeamId, mission: string, agents: readonly AgentId[]): Promise<void>;
   /** Graceful shutdown; resolves when sockets/MCP are closed and the trace is flushed. */
@@ -78,6 +87,7 @@ export interface RuntimeCommands {
 /** Complete command surface provided by live and remotely connected harness runtimes. */
 export interface LiveRuntimeCommands extends RuntimeCommands {
   removeAgent(agentId: AgentId, reason?: string): Promise<{ readonly removed: boolean }>;
+  setModel(selection: ModelSelection): void | Promise<void>;
   setAgentModel(agentId: AgentId, role: ModelRole, spec: Partial<ModelSpec>): void;
   createTeam(id: TeamId, mission: string, agents: readonly AgentId[]): Promise<void>;
 }

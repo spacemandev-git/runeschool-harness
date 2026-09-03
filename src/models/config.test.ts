@@ -22,43 +22,44 @@ function configFile(value: unknown): string {
 describe('model configuration', () => {
   test('builds defaults from the supplied environment', () => {
     const config = loadModelConfig(undefined, {
-      NOUS_BASE_URL: 'https://nous.test/v2',
-      NOUS_MODEL: 'openai/custom',
-      HARNESS_MODEL_ADMIN: 'nous:admin/model',
-      HARNESS_MODEL_AGENT: 'nous:agent/model'
+      ROUTER_API_BASE: 'https://router.test/v2',
+      ROUTER_API_KEY: 'router-key',
+      ROUTER_MODEL: 'openai/custom',
+      HARNESS_MODEL_ADMIN: 'router:admin/model',
+      HARNESS_MODEL_AGENT: 'agent/model'
     });
-    expect(config.providers.nous?.baseUrl).toBe('https://nous.test/v2');
-    expect(config.providers.openrouter).toEqual({
-      kind: 'openai-compatible', baseUrl: 'https://openrouter.ai/api/v1', apiKeyEnv: 'OR_KEY'
+    expect(config.providers).toEqual({
+      router: {
+        kind: 'openai-compatible', baseUrl: 'https://router.test/v2', apiKeyEnv: 'ROUTER_API_KEY'
+      }
     });
-    expect(DEFAULT_MODEL_CONFIG.providers.openrouter).toBeDefined();
-    expect(config.roles.director).toEqual({ provider: 'nous', model: 'openai/custom' });
-    expect(config.roles.admin).toEqual({ provider: 'nous', model: 'admin/model' });
-    expect(config.roles.agent).toEqual({ provider: 'nous', model: 'agent/model' });
+    expect(DEFAULT_MODEL_CONFIG.providers.router).toBeDefined();
+    expect(config.roles.director).toEqual({ provider: 'router', model: 'openai/custom' });
+    expect(config.roles.admin).toEqual({ provider: 'router', model: 'admin/model' });
+    expect(config.roles.agent).toEqual({ provider: 'router', model: 'agent/model' });
   });
 
-  test('accepts NOUS_KEY as a compatibility alias while preferring NOUS_API_KEY', () => {
-    expect(loadModelConfig(undefined, { NOUS_KEY: 'legacy-key' }).providers.nous?.apiKeyEnv)
-      .toBe('NOUS_KEY');
+  test('allows an unauthenticated local OpenAI-compatible router', () => {
     expect(loadModelConfig(undefined, {
-      NOUS_KEY: 'legacy-key',
-      NOUS_API_KEY: 'canonical-key'
-    }).providers.nous?.apiKeyEnv).toBe('NOUS_API_KEY');
+      ROUTER_API_BASE: 'http://127.0.0.1:11434/v1'
+    }).providers.router).toEqual({
+      kind: 'openai-compatible', baseUrl: 'http://127.0.0.1:11434/v1'
+    });
   });
 
   test('deep-merges JSON over defaults', () => {
     const path = configFile({
       providers: {
-        nous: { headers: { 'x-test': 'yes' }, maxRetries: 0 },
+        router: { headers: { 'x-test': 'yes' }, maxRetries: 0 },
         test: { kind: 'mock' }
       },
       roles: { agent: { provider: 'test', model: 'scripted', temperature: 0 } },
       agents: { bob: { agent: { model: 'bob-model' } } }
     });
     const config = loadModelConfig(path, {});
-    expect(config.providers.nous).toMatchObject({
+    expect(config.providers.router).toMatchObject({
       kind: 'openai-compatible',
-      baseUrl: 'https://inference-api.nousresearch.com/v1',
+      baseUrl: 'http://127.0.0.1:8000/v1',
       headers: { 'x-test': 'yes' },
       maxRetries: 0
     });
@@ -81,33 +82,33 @@ describe('model configuration', () => {
 
   test('rejects literal credential headers and accepts environment-backed headers', () => {
     expect(() => loadModelConfig(configFile({
-      providers: { nous: { headers: { authorization: 'Bearer committed-secret' } } }
+      providers: { router: { headers: { authorization: 'Bearer committed-secret' } } }
     }), {})).toThrow('use apiKeyEnv or headerEnv');
     const config = loadModelConfig(configFile({
-      providers: { nous: { headerEnv: { 'x-api-key': 'CUSTOM_PROVIDER_KEY' } } }
+      providers: { router: { headerEnv: { 'x-api-key': 'CUSTOM_PROVIDER_KEY' } } }
     }), {});
-    expect(config.providers.nous?.headerEnv).toEqual({ 'x-api-key': 'CUSTOM_PROVIDER_KEY' });
+    expect(config.providers.router?.headerEnv).toEqual({ 'x-api-key': 'CUSTOM_PROVIDER_KEY' });
   });
 
-  test('redacts OR_KEY values from serialized model request trace content', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'openrouter-trace-'));
+  test('redacts ROUTER_API_KEY values from serialized model request trace content', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'router-trace-'));
     directories.push(directory);
-    const previous = process.env.OR_KEY;
-    process.env.OR_KEY = 'openrouter-super-secret';
+    const previous = process.env.ROUTER_API_KEY;
+    process.env.ROUTER_API_KEY = 'router-super-secret';
     try {
       const bus = createBus();
-      const trace = createJsonlTrace(bus, directory, 'run-openrouter');
+      const trace = createJsonlTrace(bus, directory, 'run-router');
       bus.emit('model.request', {
         role: 'agent', model: 'anthropic/claude-sonnet-4.5', messages: 1, estimatedTokens: 5,
-        content: [{ role: 'system', content: 'credential openrouter-super-secret' }]
+        content: [{ role: 'system', content: 'credential router-super-secret' }]
       });
       trace.close();
       const line = readFileSync(trace.path, 'utf8');
-      expect(line).not.toContain('openrouter-super-secret');
+      expect(line).not.toContain('router-super-secret');
       expect(line).toContain('[REDACTED]');
     } finally {
-      if (previous === undefined) delete process.env.OR_KEY;
-      else process.env.OR_KEY = previous;
+      if (previous === undefined) delete process.env.ROUTER_API_KEY;
+      else process.env.ROUTER_API_KEY = previous;
     }
   });
 });

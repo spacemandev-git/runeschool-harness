@@ -3,6 +3,7 @@ import { createBus } from '../bus/index.ts';
 import type { ModelConfig, ModelProvider } from '../core/model.ts';
 import { assistantText, createMockProvider } from './mock.ts';
 import { createModelRegistry, ModelAuthError, ModelResolveError } from './registry.ts';
+import { applyModelSelection } from './selection.ts';
 
 function config(): ModelConfig {
   return {
@@ -28,6 +29,19 @@ describe('model registry', () => {
       provider: 'two', model: 'runtime', temperature: 0.1
     });
     registry.clearOverride('alice', 'agent');
+    expect(registry.resolve('agent', 'alice').model).toBe('agent-config');
+  });
+
+  test('applies director, coordinator, and agent model selections independently', () => {
+    const registry = createModelRegistry(config(), { bus: createBus() });
+    applyModelSelection(registry, { role: 'director', model: 'director-model' });
+    applyModelSelection(registry, { role: 'coordinator', team: 'red', model: 'coordinator-model' });
+    applyModelSelection(registry, { role: 'agent', agent: 'bob', model: 'agent-model' });
+
+    expect(registry.resolve('director').model).toBe('director-model');
+    expect(registry.resolve('coordinator', 'red').model).toBe('coordinator-model');
+    expect(registry.resolve('coordinator', 'blue').model).toBe('base');
+    expect(registry.resolve('agent', 'bob').model).toBe('agent-model');
     expect(registry.resolve('agent', 'alice').model).toBe('agent-config');
   });
 
@@ -69,15 +83,15 @@ describe('model registry', () => {
     const authConfig: ModelConfig = {
       ...base,
       providers: {
-        nous: { kind: 'openai-compatible', baseUrl: 'https://example.test', apiKeyEnv: 'NOUS_API_KEY' }
+        router: { kind: 'openai-compatible', baseUrl: 'https://example.test', apiKeyEnv: 'ROUTER_API_KEY' }
       },
       roles: Object.fromEntries(Object.keys(base.roles).map((role) => [role, {
-        provider: 'nous', model: 'm'
+        provider: 'router', model: 'm'
       }])) as unknown as ModelConfig['roles']
     };
     const registry = createModelRegistry(authConfig, { bus: createBus(), env: {} });
     await expect(registry.chat('agent', { messages: [] })).rejects.toEqual(
-      new ModelAuthError('NOUS_API_KEY is not set')
+      new ModelAuthError('ROUTER_API_KEY is not set')
     );
   });
 

@@ -46,4 +46,22 @@ describe('runtime JSONL trace', () => {
       else process.env.CUSTOM_PROVIDER_PASSWORD = previous;
     }
   });
+
+  test('redacts generic key names in fields, URLs, and environment variables', () => {
+    const previous = process.env.CUSTOM_ROUTER_KEY;
+    process.env.CUSTOM_ROUTER_KEY = 'generic-router-secret';
+    try {
+      const text = JSON.stringify(redactSecrets({
+        custom_router_key: 'field-secret',
+        url: 'https://example.test/a?CUSTOM_ROUTER_KEY=query-secret',
+        content: 'credential generic-router-secret'
+      }));
+      expect(text).not.toContain('field-secret');
+      expect(text).not.toContain('query-secret');
+      expect(text).not.toContain('generic-router-secret');
+    } finally {
+      if (previous === undefined) delete process.env.CUSTOM_ROUTER_KEY;
+      else process.env.CUSTOM_ROUTER_KEY = previous;
+    }
+  });
 });

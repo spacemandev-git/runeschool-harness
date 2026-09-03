@@ -131,14 +131,16 @@ export function createModelRegistry(config: ModelConfig, deps: RegistryDeps): Mo
     }
   }
 
+  const roleOverrides = new Map<ModelRole, Partial<ModelSpec>>();
   const overrides = new Map<AgentId, Map<ModelRole, Partial<ModelSpec>>>();
   const totals = new Map<string, MutableUsage>();
 
   function resolve(role: ModelRole, agentId?: AgentId): ResolvedModel {
     const roleSpec = config.roles[role];
+    const roleOverride = roleOverrides.get(role);
     const agentSpec = agentId === undefined ? undefined : config.agents?.[agentId]?.[role];
     const runtimeSpec = agentId === undefined ? undefined : overrides.get(agentId)?.get(role);
-    const spec = mergedSpec(roleSpec, agentSpec, runtimeSpec);
+    const spec = mergedSpec(roleSpec, roleOverride, agentSpec, runtimeSpec);
     if (spec === undefined) {
       throw new ModelResolveError(role, agentId, runtimeSpec?.provider ?? agentSpec?.provider ?? roleSpec?.provider, 'provider or model is missing');
     }
@@ -225,6 +227,12 @@ export function createModelRegistry(config: ModelConfig, deps: RegistryDeps): Mo
 
   return {
     resolve,
+    setRoleOverride(role, spec): void {
+      roleOverrides.set(role, spec);
+    },
+    clearRoleOverride(role): void {
+      roleOverrides.delete(role);
+    },
     setOverride(agentId, role, spec): void {
       const byRole = overrides.get(agentId) ?? new Map<ModelRole, Partial<ModelSpec>>();
       byRole.set(role, spec);

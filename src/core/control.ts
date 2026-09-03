@@ -33,7 +33,7 @@ export type ControlViewMethod = (typeof CONTROL_VIEW_METHODS)[number];
 export const CONTROL_COMMAND_METHODS = [
   'directorSay', 'adminSay', 'agentSay', 'coordinatorSay', 'setAgentGoal',
   'pauseAgent', 'resumeAgent', 'agentCommand', 'spawnAgent', 'removeAgent',
-  'setAgentModel', 'createTeam', 'stop'
+  'setModel', 'setAgentModel', 'createTeam', 'stop'
 ] as const;
 export type ControlCommandMethod = (typeof CONTROL_COMMAND_METHODS)[number];
 

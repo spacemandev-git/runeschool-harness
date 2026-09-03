@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { JsonValue } from '#protocol';
 import type { ModelConfig, ModelSpec } from '../core/model.ts';
 import type { ModelRole } from '../core/types.ts';
+import { loadHarnessEnvironment } from '../environment.ts';
 
 const ROLES = ['director', 'admin', 'coordinator', 'agent', 'summarizer'] as const satisfies readonly ModelRole[];
 const SENSITIVE_HEADER = /authorization|api[-_]?key|token|secret|credential/i;
@@ -25,9 +26,9 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 function parseEnvSpec(value: string, path: string): ModelSpec {
   // `provider:model` selects a provider explicitly; a bare slug (which may itself contain `/`,
-  // e.g. `openai/gpt-5.5-pro` on Nous Portal) is a model on the default provider.
+  // e.g. `vendor/model`) is a model on the default router.
   const colon = value.indexOf(':');
-  if (colon < 0) return { provider: 'nous', model: value };
+  if (colon < 0) return { provider: 'router', model: value };
   if (colon === 0 || colon === value.length - 1) {
     throw new ModelConfigError(path, 'must be provider:model or a bare model slug');
   }
@@ -35,15 +36,11 @@ function parseEnvSpec(value: string, path: string): ModelSpec {
 }
 
 function defaults(env: Env): ModelConfig {
-  const provider = 'nous';
-  const nousApiKeyEnv = env.NOUS_API_KEY !== undefined && env.NOUS_API_KEY.length > 0
-    ? 'NOUS_API_KEY'
-    : env.NOUS_KEY !== undefined && env.NOUS_KEY.length > 0
-      ? 'NOUS_KEY'
-      : 'NOUS_API_KEY';
+  const settings = loadHarnessEnvironment(env);
+  const provider = 'router';
   const defaultSpec: ModelSpec = {
     provider,
-    model: env.NOUS_MODEL ?? 'openai/gpt-5.5-pro'
+    model: settings.routerModel
   };
   const roles = {} as Mutable<Record<ModelRole, ModelSpec>>;
   for (const role of ROLES) {
@@ -54,15 +51,12 @@ function defaults(env: Env): ModelConfig {
   }
   return {
     providers: {
-      nous: {
+      router: {
         kind: 'openai-compatible',
-        baseUrl: env.NOUS_BASE_URL ?? 'https://inference-api.nousresearch.com/v1',
-        apiKeyEnv: nousApiKeyEnv
-      },
-      openrouter: {
-        kind: 'openai-compatible',
-        baseUrl: env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-        apiKeyEnv: 'OR_KEY'
+        baseUrl: settings.routerApiBase,
+        ...(env.ROUTER_API_KEY === undefined || env.ROUTER_API_KEY.length === 0
+          ? {}
+          : { apiKeyEnv: 'ROUTER_API_KEY' })
       }
     },
     roles

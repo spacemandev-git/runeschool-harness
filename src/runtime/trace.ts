@@ -4,11 +4,10 @@ import type { HarnessBus } from '../core/index.ts';
 
 export const SECRET_KEYS = new Set([
   'authorization', 'api_key', 'apikey', 'access_token', 'refreshtoken',
-  'refresh_token', 'secret', 'token', 'mcp-session-id',
-  'nous_api_key', 'nous_key', 'or_key'
+  'refresh_token', 'secret', 'token', 'mcp-session-id'
 ]);
 
-const SENSITIVE_KEY = /authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|secret|password|credential|session[-_]?id/i;
+const SENSITIVE_KEY = /authorization|api[-_]?key|(?:^|_)key$|access[-_]?token|refresh[-_]?token|secret|password|credential|session[-_]?id/i;
 
 function isSensitiveKey(key: string): boolean {
   return SECRET_KEYS.has(key.toLowerCase()) || SENSITIVE_KEY.test(key);
@@ -18,7 +17,7 @@ function redactUrl(value: string): string {
   try {
     const url = new URL(value);
     for (const key of [...url.searchParams.keys()]) {
-      if (SECRET_KEYS.has(key.toLowerCase())) url.searchParams.set(key, '[REDACTED]');
+      if (isSensitiveKey(key)) url.searchParams.set(key, '[REDACTED]');
     }
     return url.toString();
   } catch { return value; }

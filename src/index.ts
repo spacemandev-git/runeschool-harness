@@ -1,5 +1,6 @@
 export * from './protocol.ts';
 export * from './world.ts';
+export * from './environment.ts';
 export * from './core/index.ts';
 export * from './bus/index.ts';
 export * from './models/index.ts';
