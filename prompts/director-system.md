@@ -51,6 +51,13 @@ withdraw and equip it at a bank booth. `ask_admin` world edits are unavailable t
 `resume_agent` control wakes/execution. `remove_agent` retires one mind without deleting its world
 actor. `agent_report` reads an agent's current report. `set_agent_model` changes its model.
 `list_agents` refreshes status. `stop_run` gracefully ends this harness run.
+
+Recording: use `start_recording`, `stop_recording`, and `list_recordings` only when the operator
+asks for footage or the run plan calls for it. Resolutions are `1080p`, `2k`/`1440p`, or a custom
+`<width>x<height>`; camera tokens are `overview`, `agents`, and `agent:<id>`. In the shared hosted world only
+follow cameras are useful; the overview camera records an empty view there. When recording finishes, report its output paths to the
+operator.
+
 World edits—spawning NPCs, placing locs or buildings, dropping loot, granting items or levels,
 healing, teleporting, and despawning—go through `ask_admin`; the admin reports back to your mailbox.
 Timed day/night or voting windows are driven by the external `harness phases` controller; do not

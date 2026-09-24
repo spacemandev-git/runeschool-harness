@@ -1,6 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { AgentSpec, RunConfig, TeamId, WorldSelection } from '../core/index.ts';
+import {
+  parseRecordingResolution,
+  parseRecordingTargets,
+  type AgentSpec,
+  type RecordingResolution,
+  type RecordingTarget,
+  type RunConfig,
+  type TeamId,
+  type WorldSelection,
+} from '../core/index.ts';
 import { loadHarnessEnvironment } from '../environment.ts';
 
 export const HELP = `RuneSchool multi-agent harness
@@ -12,6 +21,8 @@ Usage (from the repository root):
   bun run start --resume <worldId> --agent agent
   bun run start --attach join.json --agent hero@hero
   bun run start --hosted --agent bob="Duel alice"
+  bun run start --hosted --agent bob --record 1080p
+  bun run start --scenario arena-island --agent hero --record 2k --record-cameras overview,agent:hero
   bun run start --daemon --scenario arena-island --agent hero="Survive"   # then: bun run start attach latest
 
 World (choose at most one; default --scenario goblin-menace):
@@ -48,6 +59,13 @@ Operation:
   --max-run-ms <n>        Hard headless run timeout
   --idle-exit-ms <n>      Terminal inactivity before headless exit (default: 15000)
   --help, -h              Show this help
+
+Recording:
+  --record <resolution>       Record at 1080p (default size), 2k/1440p, or <width>x<height>
+  --record-cameras <csv>      overview, agents, or agent:<id> (default: overview,agents; agents for --hosted)
+  --record-max-seconds <n>    Stop recording after a positive number of seconds
+  --record-out <dir>          Output directory (default: <log-dir>/recordings/<run-id>)
+  --record-keep-webm          Keep the intermediate VP8 WebM beside the MP4
 
 Control:
   attach [runId|latest] [--log-dir <path>]  Attach a cockpit; q detaches
@@ -212,6 +230,12 @@ export function parseRunConfig(argv: readonly string[], env: Env = process.env):
   let modelConfigPath: string | undefined;
   let channels: 'open' | 'team-only' = 'open';
   let traceModelMessages = false;
+  let recordingResolution: RecordingResolution | undefined;
+  let recordingCameraTokens: readonly string[] | undefined;
+  let recordingMaxSecondsText: string | undefined;
+  let recordingOutDirText: string | undefined;
+  let recordingKeepWebm = false;
+  const recordingOptionFlags: string[] = [];
   const environment = loadHarnessEnvironment(env);
   let mcpUrl = environment.runeschoolMcpUrl;
   let uiUrl = environment.runeschoolUiUrl;
@@ -304,6 +328,23 @@ export function parseRunConfig(argv: readonly string[], env: Env = process.env):
     else if (arg === '--auto-director') autoDirectorFlag = true;
     else if (arg === '--model-config') modelConfigPath = next();
     else if (arg === '--trace-model-messages') traceModelMessages = true;
+    else if (arg === '--record') recordingResolution = parseRecordingResolution(next());
+    else if (arg === '--record-cameras') {
+      recordingOptionFlags.push(arg);
+      recordingCameraTokens = next().split(',');
+    }
+    else if (arg === '--record-max-seconds') {
+      recordingOptionFlags.push(arg);
+      recordingMaxSecondsText = next();
+    }
+    else if (arg === '--record-out') {
+      recordingOptionFlags.push(arg);
+      recordingOutDirText = next();
+    }
+    else if (arg === '--record-keep-webm') {
+      recordingOptionFlags.push(arg);
+      recordingKeepWebm = true;
+    }
     else if (arg === '--mcp-url') mcpUrl = next();
     else if (arg === '--ui-url') uiUrl = next();
     else if (arg === '--log-dir') logDir = next();
@@ -318,6 +359,19 @@ export function parseRunConfig(argv: readonly string[], env: Env = process.env):
     if (agents.length > 0) throw new Error('A positional goal cannot be combined with --agent or --agents');
     agents.push({ id: 'agent', goal: positional.join(' ') });
   }
+  if (recordingResolution === undefined && recordingOptionFlags.length > 0) {
+    throw new Error(`${recordingOptionFlags[0]} requires --record`);
+  }
+  // The shared hosted world spans the whole map, where the overview camera has nothing useful to frame.
+  const parsedRecordingTargets = parseRecordingTargets(recordingCameraTokens ?? (world.kind === 'hosted' ? ['agents'] : ['overview', 'agents']));
+  const recordingTargets: readonly RecordingTarget[] = parsedRecordingTargets.targets;
+  const recordingFollowNewAgents = parsedRecordingTargets.followNewAgents;
+  const recordingMaxSeconds = recordingMaxSecondsText === undefined
+    ? undefined
+    : integer(recordingMaxSecondsText, '--record-max-seconds');
+  const recordingOutDir = recordingOutDirText === undefined
+    ? undefined
+    : resolve(nonempty(recordingOutDirText, '--record-out'));
   if (world.kind === 'scenario') world = { ...world, seed, ...(pvp ? { pvp: true } : {}) };
   else if (world.kind === 'sandbox') world = { ...world, seed, ...(pvp ? { pvp: true } : {}) };
   else if (pvp) throw new Error('--pvp is only valid with --scenario or --sandbox');
@@ -383,6 +437,16 @@ export function parseRunConfig(argv: readonly string[], env: Env = process.env):
     ...(modelConfigPath === undefined ? {} : { modelConfigPath }),
     ...(headless ? { idleExitMs: idleExitMs ?? 15_000 } : idleExitMs === undefined ? {} : { idleExitMs }),
     ...(maxRunMs === undefined ? {} : { maxRunMs }),
+    ...(recordingResolution === undefined ? {} : {
+      recording: {
+        resolution: recordingResolution,
+        targets: recordingTargets,
+        followNewAgents: recordingFollowNewAgents,
+        ...(recordingMaxSeconds === undefined ? {} : { maxSeconds: recordingMaxSeconds }),
+        ...(recordingOutDir === undefined ? {} : { outDir: recordingOutDir }),
+        ...(recordingKeepWebm ? { keepWebm: true } : {}),
+      },
+    }),
     autoDirector: autoDirectorFlag || headless,
     daemon
   };

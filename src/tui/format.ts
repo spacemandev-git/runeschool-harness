@@ -2,6 +2,8 @@ import type { AgentSummary } from '../core/runtime.ts';
 import type { HarnessEvent } from '../core/bus.ts';
 import type { WorldSnapshot } from '../core/percept.ts';
 import type { UsageByKey } from '../core/model.ts';
+import type { RecordingSummary } from '../core/recording.ts';
+import { basename } from 'node:path';
 import { hpMeter } from './theme.ts';
 
 export function truncate(value: string, width: number): string {
@@ -98,6 +100,18 @@ export function snapshotText(snapshot: WorldSnapshot): string {
 
 export function usageLine(row: UsageByKey): string {
   return `${row.key.padEnd(22)} calls ${String(row.calls).padStart(4)} · prompt ${String(row.usage.promptTokens).padStart(7)} · completion ${String(row.usage.completionTokens).padStart(7)} · errors ${row.errors}`;
+}
+
+export function recordingArtifact(summary: RecordingSummary): string {
+  return summary.file === undefined ? summary.error ?? '—' : basename(summary.file);
+}
+
+export function recordingStatusLine(summary: RecordingSummary): string {
+  return `${summary.id} · ${summary.state} · ${recordingArtifact(summary)}`;
+}
+
+export function recordingWorldLine(summary: RecordingSummary): string {
+  return `${summary.id}  ${summary.state}  ${summary.resolution.width}x${summary.resolution.height}  ${recordingArtifact(summary)}`;
 }
 
 function jsonReplacer(_key: string, value: unknown): unknown {

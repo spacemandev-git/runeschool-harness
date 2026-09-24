@@ -14,7 +14,7 @@ import type {
   BackendScenarioSummary,
   WorldDirectory,
 } from '../worldDirectory.ts';
-import { usageLine } from '../format.ts';
+import { recordingWorldLine, usageLine } from '../format.ts';
 import { theme } from '../theme.ts';
 
 type WorldChoice =
@@ -96,12 +96,16 @@ export function createWorldScreen(renderer: CliRenderer, view: RuntimeView, opti
     if (disposed) return;
     const instance = view.instance;
     const teams = view.teams();
+    const recordings = view.recordings?.() ?? [];
     const selected = choice(selector.getSelectedOption());
     const selectedInstance = selected?.kind === 'instance' ? instances.find((entry) => entry.id === selected.id) : undefined;
     const selectedScenario = selected?.kind === 'scenario' ? scenarios.find((entry) => entry.id === selected.id) : undefined;
     text.content = [
       'ACTIVE INSTANCE',
       instance === undefined ? 'not connected' : `id ${instance.id}\nkind ${instance.kind}\ntick ${instance.tick}\nhttp ${instance.httpUrl}\nwatch ${instance.watchUrl ?? '—'}`,
+      '',
+      'RECORDINGS',
+      ...(recordings.length === 0 ? ['none'] : recordings.map(recordingWorldLine)),
       ...(hasDirectory ? [
         '',
         'BACKEND',

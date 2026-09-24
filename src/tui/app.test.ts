@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
 import { createBus } from '../bus/index.ts';
+import type { RecordingRequest } from '../core/recording.ts';
 import { createCockpit } from './app.ts';
 import { HELP_TEXT } from './keymap.ts';
 import { createFakeRuntime } from './fake/fakeRuntime.ts';
@@ -217,7 +218,7 @@ test('attached q and /detach detach without stopping the run', async () => {
   }
 });
 
-test('help text lists lifecycle and model-selection commands', () => {
+test('help text lists lifecycle, model-selection, and recording commands', () => {
   expect(HELP_TEXT).toContain('q');
   expect(HELP_TEXT).toContain('/quit');
   expect(HELP_TEXT).toContain('/detach');
@@ -227,6 +228,82 @@ test('help text lists lifecycle and model-selection commands', () => {
   expect(HELP_TEXT).toContain('/model agent <agent> <model>');
   expect(HELP_TEXT).toContain('/world connect <instance>');
   expect(HELP_TEXT).toContain('/world scenario <scenario>');
+  expect(HELP_TEXT).toContain('/record start [resolution] [cameras]');
+  expect(HELP_TEXT).toContain('/record stop [camera]');
+  expect(HELP_TEXT).toContain('/record status');
+});
+
+test('record commands start, inspect, and stop fake recordings and reject invalid syntax', async () => {
+  const setup = await createTestRenderer({ width: 140, height: 36 });
+  const bus = createBus();
+  const fake = createFakeRuntime(bus);
+  const starts: RecordingRequest[] = [];
+  const stops: Array<string | undefined> = [];
+  const commands = {
+    ...fake.commands,
+    async startRecording(request: RecordingRequest) {
+      starts.push(request);
+      return await fake.commands.startRecording!(request);
+    },
+    async stopRecording(camera?: string) {
+      stops.push(camera);
+      return await fake.commands.stopRecording!(camera);
+    },
+  };
+  const cockpit = createCockpit({ view: fake.view, commands, bus, renderer: setup.renderer, refreshMs: 20 });
+  const running = cockpit.start();
+  await setup.renderOnce();
+  setup.renderer.root.findDescendantById('footer')?.focus();
+
+  await setup.mockInput.typeText('/record start');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(30);
+  expect(starts).toEqual([{
+    resolution: { width: 1920, height: 1080 },
+    targets: [
+      { kind: 'overview', orbit: true },
+      { kind: 'agent', agentId: 'hero' },
+      { kind: 'agent', agentId: 'scout' },
+      { kind: 'agent', agentId: 'miner' },
+    ],
+    followNewAgents: true,
+  }]);
+  await setup.waitForFrame((frame) => frame.includes('overview · starting'));
+
+  await setup.mockInput.typeText('/record status');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(30);
+  expect(setup.captureCharFrame()).toContain('overview · starting · —');
+
+  await Bun.sleep(500);
+  await setup.mockInput.typeText('/record status');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(30);
+  expect(setup.captureCharFrame()).toContain('overview · recording · —');
+  expect(bus.history({ prefix: 'recording.started' })).toHaveLength(4);
+
+  await setup.mockInput.typeText('/record stop overview');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(30);
+  expect(stops).toEqual(['overview']);
+  expect(setup.captureCharFrame()).toContain('overview · overview.mp4');
+  expect(bus.history({ prefix: 'recording.finished' })).toHaveLength(1);
+
+  cockpit.selectTab('World');
+  await setup.renderOnce();
+  const world = setup.captureCharFrame();
+  expect(world).toContain('RECORDINGS');
+  expect(world).toContain('overview  done  1920x1080  overview.mp4');
+
+  setup.renderer.root.findDescendantById('footer')?.focus();
+  await setup.mockInput.typeText('/record nonsense');
+  setup.mockInput.pressEnter();
+  await Bun.sleep(30);
+  expect(setup.captureCharFrame()).toContain('usage: /record start [resolution] [cameras] | /record stop [camera] | /record status');
+
+  await cockpit.stop();
+  await running;
+  fake.stop();
 });
 
 test('World lists backend instances and connects or spawns the selected row', async () => {

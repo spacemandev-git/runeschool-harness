@@ -60,6 +60,7 @@ All harness code imports the vocabulary through these two specifiers (never thro
 | `src/director` | Director and coordinators | existing |
 | `src/models` | Router-based model registry (`ROUTER_API_BASE`, `ROUTER_API_KEY`, `ROUTER_MODEL`) | existing, keep |
 | `src/control` | Unix-socket control plane | existing, keep |
+| `src/recording` | Playwright spectator capture, manifests, and ffmpeg transcoding | new |
 | `src/cli`, `src/main.ts` | Run/daemon/attach/ps/stop/logs/phases CLI | ported |
 | `src/tui` | Cockpit (World tab browser, model selection persist) | existing + launcher rewrite |
 | `prompts/*.md` | 13 grounding prompts | ported |

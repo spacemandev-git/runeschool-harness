@@ -22,6 +22,7 @@ of the public GitHub repository.
 - Thirty task-oriented reflex behaviours, a sequence combinator, presets, and declarative rule actions
 - Director, game-master admin, and team coordinator loops with mailboxes
 - A local Unix-socket control plane, daemon workflow, and OpenTUI cockpit
+- Headless spectator recording with overview and per-agent follow cameras
 - Thirteen grounding prompts and example phase scripts
 - Secret-redacted, owner-only JSONL traces and a comprehensive test suite
 
@@ -113,6 +114,8 @@ the cockpit detects it as the shared hosted world and uses the hosted join flow 
 
 ```sh
 bun run start --hosted --agent bob="Duel alice"
+bun run start --hosted --agent bob --record 1080p
+bun run start --scenario arena-island --agent hero --record 2k --record-cameras overview,agent:hero
 ```
 
 Each harness agent signs in with its own Ed25519 identity. Private identity files are stored at
@@ -166,6 +169,45 @@ bun run start phases <script.json> --target latest
 Example phase files are under `scripts/phases/`. By default, JSONL traces and control descriptors
 are written under `<repo>/runs`, while SQLite agent memory is stored under `<repo>/data`. Both
 directories are gitignored. Run `bun run start --help` for the complete flag reference.
+
+## Recording
+
+Runs can capture the chromeless spectator view automatically or start and stop cameras while the
+runtime is live. `bun install` already installs the Playwright package. Recording additionally
+requires its Chromium browser and `ffmpeg` on `PATH`:
+
+```sh
+bunx playwright install chromium
+bun run start --hosted --agent bob --record 1080p
+bun run start --scenario arena-island --agent hero --record 2k --record-cameras overview,agent:hero
+```
+
+`--record` accepts `1080p`, `2k`/`1440p`, or an even `<width>x<height>` size. The optional flags are
+`--record-cameras <csv>`, `--record-max-seconds <n>`, `--record-out <dir>`, and
+`--record-keep-webm`; they require `--record`. Camera tokens are `overview`, `agents` (every current
+agent and agents spawned later), and `agent:<id>`. The default is `overview,agents`, or `agents`
+alone in the shared hosted world.
+
+With the default log directory, output is written as:
+
+```text
+runs/recordings/<runId>/overview.mp4
+runs/recordings/<runId>/agent-<id>.mp4
+runs/recordings/<runId>/recording.json
+```
+
+The intermediate `<cameraId>.webm` is retained only with `--record-keep-webm`. A live or attached
+cockpit accepts `/record start [resolution] [cameras]`, `/record stop [camera]`, and
+`/record status`. The director exposes the equivalent `start_recording`, `stop_recording`, and
+`list_recordings` tools. One resolution is allowed per active recording session: stop all cameras
+before starting at another size; requesting the same size adds cameras to the existing session.
+
+The overview camera frames the living players' centroid of a scenario or sandbox arena. In the
+shared hosted world it has nothing useful to frame (it records a dark, empty view), so hosted runs
+default to follow cameras and `overview` must be requested explicitly there. Capture
+uses Playwright's 25 fps VP8 screencast at the exact requested pixel size, then transcodes it to
+H.264 MP4 with `-crf 18`. The output dimensions are exact, but source bitrate and compression are
+those supplied by Playwright.
 
 ## Environment
 
@@ -242,6 +284,7 @@ assignment unchanged.
 | `src/transport/` | MCP session, actor WebSocket/HTTP link, and RuneSchool definitions reader |
 | `src/perception/` | SDK-backed world model, folding, differencing, visibility, and summaries |
 | `src/runtime/` | `createHarnessRuntime`, agent runtimes, mailboxes, world reads, runtime view/commands, and traces |
+| `src/recording/` | Playwright spectator capture, WebM lifecycle, manifests, and ffmpeg transcoding |
 | `src/admin/` | Operator-facing game-master persona and curated tools |
 | `src/mind/`, `src/reflex/` | Agent deliberation and deterministic behaviours/rules |
 | `src/director/` | Director and team coordinators |

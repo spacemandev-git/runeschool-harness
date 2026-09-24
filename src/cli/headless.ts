@@ -5,7 +5,7 @@ const EXACT = new Set([
   'agent.spawned', 'agent.state', 'agent.goal', 'agent.action', 'agent.finished', 'agent.message'
 ]);
 function visible(type: string): boolean {
-  return type.startsWith('run.') || type.startsWith('world.') || type.startsWith('director.')
+  return type.startsWith('run.') || type.startsWith('world.') || type.startsWith('recording.') || type.startsWith('director.')
     || type.startsWith('admin.') || type.startsWith('coordinator.') || type.startsWith('team.') || EXACT.has(type);
 }
 function summary(data: unknown): string {

@@ -1,8 +1,13 @@
 import type { JsonValue } from '#protocol';
+import { dirname } from 'node:path';
 import type {
   AgentSpec, HarnessBus, McpSession, ModelRegistry, ModelRole, RuntimeCommands, RuntimeView, TeamId,
   ToolDefinition
 } from '../core/index.ts';
+import {
+  parseRecordingResolution, parseRecordingTargets, recordingTargetId,
+  type RecordingRequest, type RecordingTarget,
+} from '../core/recording.ts';
 import type { Mailboxes } from '../runtime/mailbox.ts';
 
 export interface RuntimeInternals {
@@ -56,6 +61,44 @@ function schema(properties: Record<string, JsonValue>, required: readonly string
   return {
     type: 'object', properties, ...(required.length === 0 ? {} : { required }),
     additionalProperties: false, ...(description === undefined ? {} : { description })
+  };
+}
+
+function recordingRequest(args: Readonly<Record<string, unknown>>, view: RuntimeView): RecordingRequest {
+  rejectUnknown(args, 'start_recording', ['resolution', 'cameras', 'maxSeconds', 'keepWebm']);
+  const resolution = parseRecordingResolution(args.resolution === undefined
+    ? '1080p'
+    : string(args.resolution, 'resolution'));
+  const cameraValues = args.cameras ?? (view.instance?.kind === 'hosted' ? ['agents'] : ['overview', 'agents']);
+  if (!Array.isArray(cameraValues)) throw new Error('cameras must be an array');
+  const cameraTokens = cameraValues.map((value, index) => string(value, `cameras[${index}]`));
+  const parsed = parseRecordingTargets(cameraTokens);
+  const knownAgents = view.agents().map((entry) => entry.id);
+  for (const target of parsed.targets) {
+    if (target.kind === 'agent' && !knownAgents.includes(target.agentId)) {
+      throw new Error(`Unknown recording agent '${target.agentId}'; known agents: ${knownAgents.join(', ') || '(none)'}`);
+    }
+  }
+  const targets: RecordingTarget[] = [...parsed.targets];
+  if (parsed.followNewAgents) {
+    const seen = new Set(targets.map(recordingTargetId));
+    for (const agentId of knownAgents) {
+      const target: RecordingTarget = { kind: 'agent', agentId };
+      if (!seen.has(recordingTargetId(target))) targets.push(target);
+    }
+  }
+  let maxSeconds: number | undefined;
+  if (args.maxSeconds !== undefined) {
+    maxSeconds = number(args.maxSeconds, 'maxSeconds');
+    if (!Number.isInteger(maxSeconds) || maxSeconds <= 0) throw new Error('maxSeconds must be a positive integer');
+  }
+  const keepWebm = args.keepWebm === undefined ? undefined : boolean(args.keepWebm, 'keepWebm');
+  return {
+    resolution,
+    targets,
+    ...(parsed.followNewAgents ? { followNewAgents: true } : {}),
+    ...(maxSeconds === undefined ? {} : { maxSeconds }),
+    ...(keepWebm === undefined ? {} : { keepWebm }),
   };
 }
 
@@ -293,6 +336,37 @@ export function createHarnessTools(runtime: RuntimeInternals, bus: HarnessBus, m
     }),
     tool('stop_run', 'Gracefully stop the harness run.', schema({ reason: { type: 'string' } }, ['reason']), async (args) => {
       await runtime.commands.stop(string(args.reason, 'reason')); return { ok: true };
+    }),
+    tool('start_recording', 'Capture the public spectator view in a headless browser. It takes several seconds to become ready and should be started only when the operator asks for it or the run plan calls for footage. Files are written under the run log directory.', schema({
+      resolution: { type: 'string', description: '1080p (default), 2k, 1440p, or an even <width>x<height> size.' },
+      cameras: { type: 'array', items: { type: 'string' }, description: 'Camera tokens: overview, agents, or agent:<id>. Defaults to overview and agents, or agents alone in the shared hosted world where the overview camera has nothing to frame.' },
+      maxSeconds: { type: 'integer', minimum: 1, description: 'Positive integer time limit in seconds.' },
+      keepWebm: { type: 'boolean', description: 'Keep intermediate WebM files alongside MP4 output.' },
+    }), async (args) => {
+      if (runtime.commands.startRecording === undefined) throw new Error('recording is not available in this runtime');
+      const recordings = await runtime.commands.startRecording(recordingRequest(args, runtime.view));
+      const failed = recordings.filter((summary) => summary.state === 'failed');
+      const outDir = recordings[0]?.file === undefined ? undefined : dirname(recordings[0].file);
+      return json({
+        ok: true,
+        recordings,
+        ...(outDir === undefined ? {} : { outDir }),
+        ...(failed.length === 0 ? {} : {
+          note: `Failed cameras: ${failed.map((summary) => `${summary.id}: ${summary.error ?? 'unknown error'}`).join('; ')}`,
+        }),
+      });
+    }),
+    tool('stop_recording', 'Stop one or all headless public-spectator recordings and return their output files under the run log directory. Recording is used only for operator-requested or planned footage.', schema({
+      camera: { type: 'string', description: 'Camera id such as overview or agent-bob; omit to stop every camera.' },
+    }), async (args) => {
+      rejectUnknown(args, 'stop_recording', ['camera']);
+      if (runtime.commands.stopRecording === undefined) throw new Error('recording is not available in this runtime');
+      const camera = args.camera === undefined ? undefined : string(args.camera, 'camera');
+      return json({ ok: true, recordings: await runtime.commands.stopRecording(camera) });
+    }),
+    tool('list_recordings', 'List public-spectator headless recordings, including readiness/state and files under the run log directory. Recording is used only for operator-requested or planned footage.', schema({}), async (args) => {
+      rejectUnknown(args, 'list_recordings', []);
+      return json({ recordings: runtime.view.recordings?.() ?? [] });
     }),
     tool('watch_url', 'Return the spectator URL.', schema({}), async () => ({ watchUrl: runtime.watchUrl() ?? null })),
     tool('ask_admin', 'Ask the admin persona to change the world.', schema({ text: { type: 'string' } }, ['text']), async (args) => {

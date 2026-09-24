@@ -2,7 +2,8 @@ import { ACTOR_COMMAND_TYPES } from '#protocol';
 import type { JsonValue } from '#protocol';
 import { AGENT_DENIED_COMMANDS } from '../core/actions.ts';
 import type {
-  Admin, AgentSpec, LiveRuntimeCommands, ModelRegistry, ModelRole, ModelSpec, RunConfig, RuntimeView, TeamId
+  Admin, AgentSpec, LiveRuntimeCommands, ModelRegistry, ModelRole, ModelSpec, RecordingRequest,
+  RecordingSummary, RunConfig, RuntimeView, TeamId
 } from '../core/index.ts';
 import type { Coordinator, Director } from '../director/index.ts';
 import { validateAndApplyModelSelection } from '../models/selection.ts';
@@ -35,6 +36,9 @@ export interface RuntimeSurfaceState {
   readonly adminSay: (text: string) => Promise<void>;
   readonly coordinatorSay: (team: TeamId, text: string) => Promise<void>;
   readonly agentSay: (agent: string, text: string) => Promise<void>;
+  readonly recordings: () => readonly RecordingSummary[];
+  readonly startRecording: (request: RecordingRequest) => Promise<readonly RecordingSummary[]>;
+  readonly stopRecording: (id?: string) => Promise<readonly RecordingSummary[]>;
 }
 
 function json(value: unknown): JsonValue { return JSON.parse(JSON.stringify(value)) as JsonValue; }
@@ -127,6 +131,7 @@ export function createRuntimeSurface(state: RuntimeSurfaceState): {
     adminTranscript() { return state.admin()?.transcript() ?? []; },
     coordinatorTranscript(team) { return state.teams().find((entry) => entry.id === team)?.coordinator?.transcript() ?? []; },
     usage: () => state.models.usage(),
+    recordings: state.recordings,
     config: () => json(redactSecrets(redactTokenFields({
       ...supervisorSafeConfig(state.config),
       models: {
@@ -168,7 +173,9 @@ export function createRuntimeSurface(state: RuntimeSurfaceState): {
       await validateAndApplyModelSelection(state.models, selection);
     },
     setAgentModel(agentId, role, spec): void { find(agentId); state.models.setOverride(agentId, role, spec); },
-    createTeam: state.createTeam
+    createTeam: state.createTeam,
+    startRecording: state.startRecording,
+    stopRecording: state.stopRecording,
   };
   return { view, commands };
 }

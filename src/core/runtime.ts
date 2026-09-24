@@ -6,6 +6,7 @@ import type { JsonValue } from '#protocol';
 import type { AgentSpec } from './agent.ts';
 import type { ChatMessage, UsageByKey } from './model.ts';
 import type { WorldSnapshot } from './percept.ts';
+import type { RecordingRequest, RecordingSummary, RunRecordingConfig } from './recording.ts';
 import type { ReflexEngineState } from './reflex.ts';
 import type { AgentId, AgentState, ChannelPolicy, ModelRole, PauseOptions, RunId, TeamId } from './types.ts';
 import type { ModelSpec } from './model.ts';
@@ -50,6 +51,8 @@ export interface RuntimeView {
   adminTranscript(): readonly ChatMessage[];
   coordinatorTranscript(team: TeamId): readonly ChatMessage[];
   usage(): readonly UsageByKey[];
+  /** Active and finished spectator recordings for this run (live runtimes and control clients provide it). */
+  recordings?(): readonly RecordingSummary[];
   /** Redacted, JSON-safe config for display. */
   config(): JsonValue;
 }
@@ -81,6 +84,10 @@ export interface RuntimeCommands {
   /** @deprecated Use {@link setModel} for cockpit-visible model assignments. */
   setAgentModel?(agentId: AgentId, role: ModelRole, spec: Partial<ModelSpec>): void;
   createTeam?(id: TeamId, mission: string, agents: readonly AgentId[]): Promise<void>;
+  /** Start recording the spectator view; resolves with one summary per camera (failed cameras included). */
+  startRecording?(request: RecordingRequest): Promise<readonly RecordingSummary[]>;
+  /** Stop one camera by id, or every camera; resolves after transcoding. */
+  stopRecording?(id?: string): Promise<readonly RecordingSummary[]>;
   /** Graceful shutdown; resolves when sockets/MCP are closed and the trace is flushed. */
   stop(reason: string): Promise<void>;
 }
@@ -91,6 +98,8 @@ export interface LiveRuntimeCommands extends RuntimeCommands {
   setModel(selection: ModelSelection): void | Promise<void>;
   setAgentModel(agentId: AgentId, role: ModelRole, spec: Partial<ModelSpec>): void;
   createTeam(id: TeamId, mission: string, agents: readonly AgentId[]): Promise<void>;
+  startRecording(request: RecordingRequest): Promise<readonly RecordingSummary[]>;
+  stopRecording(id?: string): Promise<readonly RecordingSummary[]>;
 }
 
 /** Everything the CLI needs to start a run. Built by `cli/config.ts`. */
@@ -123,4 +132,6 @@ export interface RunConfig {
   readonly keepAlive?: boolean;
   /** Where a daemonised run writes stdout/stderr; recorded in the control descriptor. */
   readonly daemonLogPath?: string;
+  /** Record the spectator view automatically from provisioning until the run stops. */
+  readonly recording?: RunRecordingConfig;
 }

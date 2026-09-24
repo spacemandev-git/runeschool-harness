@@ -11,6 +11,10 @@ import {
 import type { JsonValue } from '#protocol';
 import type { AgentSpec } from '../core/agent.ts';
 import type { HarnessBus } from '../core/bus.ts';
+import {
+  parseRecordingResolution, parseRecordingTargets, recordingTargetId,
+  type RecordingTarget,
+} from '../core/recording.ts';
 import type { RuntimeCommands, RuntimeView } from '../core/runtime.ts';
 import type { BackendInstanceSummary, WorldDirectory } from './worldDirectory.ts';
 import { createAdminScreen } from './screens/admin.ts';
@@ -21,6 +25,7 @@ import { createHelpScreen } from './screens/help.ts';
 import { createTraceScreen } from './screens/trace.ts';
 import { createWorldScreen } from './screens/world.ts';
 import { TAB_NAMES } from './keymap.ts';
+import { recordingArtifact, recordingStatusLine } from './format.ts';
 import { theme } from './theme.ts';
 import { createStatusBar } from './widgets/statusBar.ts';
 
@@ -171,7 +176,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
       footer.onContentChange = () => {
         if (selectedTab !== 5) return;
         const value = footer.plainText.trim();
-        const isCommand = /^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|stop|quit|detach|help)(\s|$)/.test(value);
+        const isCommand = /^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|record|stop|quit|detach|help)(\s|$)/.test(value);
         if (value === '') traceScreen.setFilter('');
         else if (value.startsWith('/') && !isCommand) traceScreen.setFilter(value);
       };
@@ -219,7 +224,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         else if (selectedTab === 1) footer.placeholder = 'Tell the admin what to change in the world…';
         else if (selectedTab === 3) footer.placeholder = `message ${selectedAgentId() ?? 'agent'}…`;
         else if (selectedTab === 5) footer.placeholder = '/prefix to filter, or enter a command…';
-        else footer.placeholder = 'enter /world, /model, /goal, /say, /pause, /resume, /cmd, /spawn, /stop, /quit, /detach, or /help…';
+        else footer.placeholder = 'enter /world, /record, /model, /goal, /say, /pause, /resume, /cmd, /spawn, /stop, /quit, /detach, or /help…';
       }
 
       function showScreen(): void {
@@ -339,6 +344,55 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         if (/^\/world(\s|$)/.test(text)) {
           throw new Error('usage: /world refresh | /world connect <instance> | /world scenario <scenario> | /world sandbox <json>');
         }
+        const startRecording = text.match(/^\/record\s+start(?:\s+(\S+))?(?:\s+(\S+))?$/);
+        if (startRecording !== null) {
+          if (options.commands.startRecording === undefined) throw new Error('this runtime does not support recording');
+          const resolution = parseRecordingResolution(startRecording[1] ?? '1080p');
+          const cameraTokens = (startRecording[2] ?? (options.view.instance?.kind === 'hosted' ? 'agents' : 'overview,agents')).split(',');
+          const parsed = parseRecordingTargets(cameraTokens);
+          const knownAgents = options.view.agents().map((agent) => agent.id);
+          for (const target of parsed.targets) {
+            if (target.kind === 'agent' && !knownAgents.includes(target.agentId)) {
+              throw new Error(`Unknown recording agent '${target.agentId}'; known agents: ${knownAgents.join(', ') || '(none)'}`);
+            }
+          }
+          const targets: RecordingTarget[] = [...parsed.targets];
+          if (parsed.followNewAgents) {
+            const seen = new Set(targets.map(recordingTargetId));
+            for (const agentId of knownAgents) {
+              const target: RecordingTarget = { kind: 'agent', agentId };
+              if (!seen.has(recordingTargetId(target))) targets.push(target);
+            }
+          }
+          const recordings = await options.commands.startRecording({
+            resolution,
+            targets,
+            ...(parsed.followNewAgents ? { followNewAgents: true } : {}),
+          });
+          status.setHint(recordings.length === 0
+            ? 'no recordings'
+            : `recordings: ${recordings.map((summary) => `${summary.id} · ${summary.state}`).join(', ')}`);
+          return;
+        }
+        const stopRecording = text.match(/^\/record\s+stop(?:\s+(\S+))?$/);
+        if (stopRecording !== null) {
+          if (options.commands.stopRecording === undefined) throw new Error('this runtime does not support recording');
+          const recordings = await options.commands.stopRecording(stopRecording[1]);
+          status.setHint(recordings.length === 0
+            ? 'no recordings'
+            : `recordings stopped: ${recordings.map((summary) => `${summary.id} · ${summary.error ?? recordingArtifact(summary)}`).join(', ')}`);
+          return;
+        }
+        if (text === '/record status') {
+          const recordings = options.view.recordings?.() ?? [];
+          status.setHint(recordings.length === 0
+            ? 'no recordings'
+            : `recordings: ${recordings.map(recordingStatusLine).join(', ')}`);
+          return;
+        }
+        if (/^\/record(\s|$)/.test(text)) {
+          throw new Error('usage: /record start [resolution] [cameras] | /record stop [camera] | /record status');
+        }
         if (text === '/stop') {
           await options.commands.stop('operator');
           status.setHint('stopped · connect to a RuneSchool instance from the World tab');
@@ -363,14 +417,14 @@ export function createCockpit(options: CockpitOptions): Cockpit {
         const text = footer.plainText.trim();
         if (text.length === 0) return;
         footer.setText('');
-        if (/^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|stop|quit|detach|help)(\s|$)/.test(text)) await runCommand(() => consoleCommand(text));
+        if (/^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|record|stop|quit|detach|help)(\s|$)/.test(text)) await runCommand(() => consoleCommand(text));
         else if (selectedTab === 0) await runCommand(() => options.commands.directorSay(text));
         else if (selectedTab === 1) await runCommand(() => options.commands.adminSay(text));
         else if (selectedTab === 3) {
           const id = selectedAgentId();
           if (id === undefined) status.setError('no agent selected');
           else await runCommand(() => options.commands.agentSay(id, text));
-        } else if (selectedTab === 5 && text.startsWith('/') && !/^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|stop|quit|detach|help)(\s|$)/.test(text)) {
+        } else if (selectedTab === 5 && text.startsWith('/') && !/^\/(admin|goal|say|pause|resume|cmd|spawn|model|world|record|stop|quit|detach|help)(\s|$)/.test(text)) {
           traceScreen.setFilter(text);
           status.setError(undefined);
           status.setHint(`trace filter /${traceScreen.filter()}`);
@@ -442,7 +496,7 @@ export function createCockpit(options: CockpitOptions): Cockpit {
       };
       activeRenderer.keyInput.on('keypress', keyHandler);
       tabs.on(TabSelectRenderableEvents.SELECTION_CHANGED, (index: number) => { selectedTab = index; showScreen(); });
-      const offBus = options.bus.onAny((event) => { if (event.type.startsWith('agent.') || event.type.startsWith('model.') || event.type.startsWith('team.')) dirty = true; });
+      const offBus = options.bus.onAny((event) => { if (event.type.startsWith('agent.') || event.type.startsWith('model.') || event.type.startsWith('team.') || event.type.startsWith('recording.')) dirty = true; });
       const refresh = (): void => {
         updateHeader();
         updateModelBar();

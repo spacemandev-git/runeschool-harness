@@ -4,4 +4,5 @@ export * from './worldReads.ts';
 export * from './agentRuntime.ts';
 export * from './view.ts';
 export * from './credentials.ts';
+export * from './recording.ts';
 export * from './orchestrator.ts';

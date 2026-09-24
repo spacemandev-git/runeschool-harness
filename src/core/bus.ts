@@ -7,6 +7,7 @@ import type { JsonValue, SimEvent } from '#protocol';
 import type { ActionOutcome } from './actions.ts';
 import type { ChatMessage, ToolCall, Usage } from './model.ts';
 import type { PerceptDelta, WorldSnapshot } from './percept.ts';
+import type { RecordingResolution, RecordingTarget } from './recording.ts';
 import type { ReflexEngineState } from './reflex.ts';
 import type { AgentId, AgentState, ModelRole, RunId, TeamId, WakeReason } from './types.ts';
 
@@ -19,6 +20,9 @@ export interface HarnessEventMap {
   'mcp.connected': { readonly url: string; readonly tools: readonly string[] };
   'mcp.tool': { readonly name: string; readonly arguments: JsonValue; readonly ok: boolean; readonly durationMs: number; readonly resultPreview: string };
   'world.provisioned': { readonly instanceId: string; readonly httpUrl: string; readonly wsUrl: string; readonly kind: 'scenario' | 'sandbox' | 'resumed' | 'attached' | 'hosted'; readonly watchUrl?: string };
+
+  'recording.started': { readonly id: string; readonly target: RecordingTarget; readonly resolution: RecordingResolution; readonly outDir: string };
+  'recording.finished': { readonly id: string; readonly ok: boolean; readonly file?: string; readonly durationMs: number; readonly error?: string };
 
   'agent.spawned': {
     readonly agentId: AgentId; readonly tag: string; readonly entity: number; readonly team?: TeamId;

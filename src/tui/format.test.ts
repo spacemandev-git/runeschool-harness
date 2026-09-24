@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentSummary } from '../core/runtime.ts';
+import type { RecordingSummary } from '../core/recording.ts';
 import { createBus } from '../bus/index.ts';
 import { createFakeRuntime } from './fake/fakeRuntime.ts';
-import { agentRow, eventLine, snapshotText } from './format.ts';
+import { agentRow, eventLine, recordingStatusLine, recordingWorldLine, snapshotText } from './format.ts';
 import { hpMeter } from './theme.ts';
 
 const agent: AgentSummary = {
@@ -43,5 +44,17 @@ describe('formatters', () => {
     expect(text).toContain('inventory');
     expect(text).not.toContain('{');
     expect(text).not.toContain('}');
+  });
+
+  test('recording rows show camera, state, resolution, and safe basenames', () => {
+    const recording: RecordingSummary = {
+      id: 'agent-hero', target: { kind: 'agent', agentId: 'hero' },
+      resolution: { width: 2560, height: 1440 }, state: 'done', startedAt: 1,
+      file: '/private/runs/run-1/agent-hero.mp4',
+    };
+    expect(recordingStatusLine(recording)).toBe('agent-hero · done · agent-hero.mp4');
+    expect(recordingWorldLine(recording)).toBe('agent-hero  done  2560x1440  agent-hero.mp4');
+    expect(recordingStatusLine({ ...recording, state: 'failed', file: undefined, error: 'timed out' }))
+      .toBe('agent-hero · failed · timed out');
   });
 });

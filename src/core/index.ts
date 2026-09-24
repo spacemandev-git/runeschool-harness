@@ -11,3 +11,4 @@ export * from './agent.ts';
 export * from './runtime.ts';
 export * from './admin.ts';
 export * from './control.ts';
+export * from './recording.ts';

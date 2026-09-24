@@ -138,10 +138,72 @@ describe('run config', () => {
     expect(() => parseRunConfig(['--run-id', 'a'.repeat(65)], {})).toThrow('must match');
   });
 
+  test('parses recording defaults for hosted worlds (follow cameras only)', () => {
+    const config = parseRunConfig(['--hosted', '--agent', 'bob', '--record', '1080p'], {});
+    if ('help' in config || 'subcommand' in config) throw new Error('unexpected config');
+    expect(config.recording).toEqual({
+      resolution: { width: 1920, height: 1080 },
+      targets: [],
+      followNewAgents: true,
+    });
+  });
+
+  test('parses custom recording cameras and options for attached worlds', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'harness-record-config-')); dirs.push(dir);
+    const attachPath = join(dir, 'attach.json');
+    writeFileSync(attachPath, JSON.stringify({
+      instanceId: 'inst-1', httpUrl: 'https://api.test/instances/inst-1',
+      wsUrl: 'wss://api.test/instances/inst-1/ws', actors: [],
+    }));
+    const config = parseRunConfig([
+      '--attach', attachPath, '--record', '2k',
+      '--record-cameras', 'agent:bob,overview,agent:bob',
+      '--record-max-seconds', '90', '--record-out', './captures', '--record-keep-webm',
+    ], {});
+    if ('help' in config || 'subcommand' in config) throw new Error('unexpected config');
+    expect(config.recording).toEqual({
+      resolution: { width: 2560, height: 1440 },
+      targets: [{ kind: 'agent', agentId: 'bob' }, { kind: 'overview', orbit: true }],
+      followNewAgents: false,
+      maxSeconds: 90,
+      outDir: resolve('./captures'),
+      keepWebm: true,
+    });
+  });
+
+  test('rejects invalid recording resolutions and camera tokens', () => {
+    expect(() => parseRunConfig(['--record', '4k-ish'], {})).toThrow("resolution '4k-ish'");
+    expect(() => parseRunConfig(['--record', '1080p', '--record-cameras', 'side'], {})).toThrow(
+      "invalid recording target 'side'",
+    );
+  });
+
+  test('requires --record for every recording-only option', () => {
+    expect(() => parseRunConfig(['--record-cameras', 'overview'], {})).toThrow('--record-cameras requires --record');
+    expect(() => parseRunConfig(['--record-max-seconds', '5'], {})).toThrow('--record-max-seconds requires --record');
+    expect(() => parseRunConfig(['--record-out', './video'], {})).toThrow('--record-out requires --record');
+    expect(() => parseRunConfig(['--record-keep-webm'], {})).toThrow('--record-keep-webm requires --record');
+  });
+
   test('parses control subcommands and their options', () => {
     expect(parseRunConfig(['attach', 'latest', '--log-dir', '/tmp/runs'], {})).toEqual({ subcommand: { name: 'attach', target: 'latest', logDir: '/tmp/runs' } });
     expect(parseRunConfig(['ps', '--prune', '--log-dir', '/tmp/runs'], {})).toEqual({ subcommand: { name: 'ps', prune: true, logDir: '/tmp/runs' } });
     expect(parseRunConfig(['stop', 'run-1', '--log-dir', '/tmp/runs'], {})).toEqual({ subcommand: { name: 'stop', target: 'run-1', logDir: '/tmp/runs' } });
     expect(parseRunConfig(['logs', 'latest', '-f', '--log-dir', '/tmp/runs'], {})).toEqual({ subcommand: { name: 'logs', target: 'latest', follow: true, logDir: '/tmp/runs' } });
+  });
+});
+
+describe('recording camera defaults', () => {
+  test('hosted runs default to follow cameras only; other worlds add the overview camera', () => {
+    const hosted = parseRunConfig(['--hosted', '--agent', 'bob', '--record', '2k'], {});
+    if ('help' in hosted || 'subcommand' in hosted) throw new Error('unexpected help');
+    expect(hosted.recording).toMatchObject({ resolution: { width: 2560, height: 1440 }, targets: [], followNewAgents: true });
+    const scenario = parseRunConfig(['--scenario', 'arena-island', '--agent', 'hero', '--record', '1080p'], {});
+    if ('help' in scenario || 'subcommand' in scenario) throw new Error('unexpected help');
+    expect(scenario.recording).toMatchObject({ targets: [{ kind: 'overview', orbit: true }], followNewAgents: true });
+    const explicit = parseRunConfig(['--hosted', '--agent', 'bob', '--record', '1080p', '--record-cameras', 'overview,agent:bob'], {});
+    if ('help' in explicit || 'subcommand' in explicit) throw new Error('unexpected help');
+    expect(explicit.recording?.targets).toEqual([{ kind: 'overview', orbit: true }, { kind: 'agent', agentId: 'bob' }]);
+    expect(explicit.recording?.followNewAgents).toBe(false);
   });
 });

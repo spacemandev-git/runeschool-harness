@@ -3,6 +3,13 @@ import type { AgentSpec } from '../../core/agent.ts';
 import type { HarnessBus } from '../../core/bus.ts';
 import type { ChatMessage, UsageByKey } from '../../core/model.ts';
 import type { WorldSnapshot, PerceptDelta } from '../../core/percept.ts';
+import {
+  recordingTargetId,
+  type RecordingRequest,
+  type RecordingResolution,
+  type RecordingSummary,
+  type RecordingTarget,
+} from '../../core/recording.ts';
 import type { ReflexEngineState } from '../../core/reflex.ts';
 import type { AgentSummary, RuntimeCommands, RuntimeView, TeamSummary } from '../../core/runtime.ts';
 import type { AgentState } from '../../core/types.ts';
@@ -100,6 +107,9 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
   const coordinatorModels = new Map<string, string>([['alpha', 'fake-coordinator-v1']]);
   const usage = new Map<string, { calls: number; prompt: number; completion: number; errors: number }>();
   let lastReport = 'Hero and Scout are moving to their objectives.';
+  const recordings = new Map<string, RecordingSummary>();
+  let recordingResolution: RecordingResolution | undefined;
+  let recordingFollowNewAgents = false;
 
   const summaries = (): AgentSummary[] => [...agents.values()].map((agent) => ({
     id: agent.id, displayName: agent.displayName, tag: agent.tag, entity: agent.entity,
@@ -124,6 +134,7 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
     adminTranscript() { return admin.slice(); },
     coordinatorTranscript(team) { return coordinators.get(team)?.slice() ?? []; },
     usage: usageRows,
+    recordings() { return [...recordings.values()]; },
     config() {
       return {
         fake: true, seed, credentials: '[redacted]', pulseMs: 600,
@@ -146,6 +157,23 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
     const agent = agents.get(id);
     if (agent === undefined) throw new Error(`unknown agent: ${id}`);
     return agent;
+  };
+  const beginRecording = (target: RecordingTarget, resolution: RecordingResolution): RecordingSummary => {
+    const id = recordingTargetId(target);
+    const existing = recordings.get(id);
+    if (existing !== undefined && ['starting', 'recording', 'finishing'].includes(existing.state)) return existing;
+    const startedAt = Date.now();
+    const summary: RecordingSummary = { id, target, resolution, state: 'starting', startedAt };
+    recordings.set(id, summary);
+    const outDir = `/tmp/runeschool-recordings/${runId}`;
+    void later(500, () => {
+      const current = recordings.get(id);
+      if (current?.state === 'starting') {
+        recordings.set(id, { ...current, state: 'recording' });
+        bus.emit('recording.started', { id, target, resolution, outDir });
+      }
+    });
+    return summary;
   };
   const commands: RuntimeCommands = {
     async adminSay(text) {
@@ -226,6 +254,9 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
       agents.set(agent.id, agent);
       bus.emit('agent.spawned', { agentId: agent.id, tag: agent.tag, entity: agent.entity, ...(agent.team === undefined ? {} : { team: agent.team }), displayName: agent.displayName });
       bus.emit('agent.snapshot', { agentId: agent.id, snapshot: agent.snapshot });
+      if (recordingFollowNewAgents && recordingResolution !== undefined) {
+        beginRecording({ kind: 'agent', agentId: agent.id }, recordingResolution);
+      }
     },
     setModel(selection) {
       if (selection.role === 'director') {
@@ -242,6 +273,41 @@ export function createFakeRuntime(bus: HarnessBus, options: { readonly seed?: nu
         level: 'info', scope: 'models',
         message: `selected ${selection.model} for ${selection.role}`
       });
+    },
+    async startRecording(request: RecordingRequest) {
+      if (recordingResolution !== undefined
+        && (recordingResolution.width !== request.resolution.width || recordingResolution.height !== request.resolution.height)) {
+        throw new Error(`recording is already active at ${recordingResolution.width}x${recordingResolution.height}`);
+      }
+      recordingResolution = request.resolution;
+      recordingFollowNewAgents ||= request.followNewAgents === true;
+      return request.targets.map((target) => beginRecording(target, request.resolution));
+    },
+    async stopRecording(id) {
+      const selected = id === undefined
+        ? [...recordings.values()].filter((summary) => summary.state === 'starting' || summary.state === 'recording' || summary.state === 'finishing')
+        : [recordings.get(id)].filter((summary): summary is RecordingSummary => summary !== undefined);
+      if (id !== undefined && selected.length === 0) throw new Error(`unknown recording camera: ${id}`);
+      const finished: RecordingSummary[] = [];
+      for (const summary of selected) {
+        recordings.set(summary.id, { ...summary, state: 'finishing' });
+        const endedAt = Date.now();
+        const file = `/tmp/runeschool-recordings/${runId}/${summary.id}.mp4`;
+        const done: RecordingSummary = { ...summary, state: 'done', endedAt, file };
+        recordings.set(summary.id, done);
+        finished.push(done);
+        bus.emit('recording.finished', {
+          id: summary.id,
+          ok: true,
+          file,
+          durationMs: Math.max(0, endedAt - summary.startedAt),
+        });
+      }
+      if (id === undefined || ![...recordings.values()].some((summary) => summary.state === 'starting' || summary.state === 'recording' || summary.state === 'finishing')) {
+        recordingResolution = undefined;
+        recordingFollowNewAgents = false;
+      }
+      return finished;
     },
     async stop(reason) {
       stopTimers();

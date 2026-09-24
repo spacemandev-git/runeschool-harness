@@ -156,6 +156,7 @@ export async function createControlServer(options: ControlServerOptions): Promis
       agents: options.view.agents(),
       teams: options.view.teams(),
       usage: options.view.usage(),
+      recordings: options.view.recordings?.() ?? [],
       config: options.view.config(),
     };
   };

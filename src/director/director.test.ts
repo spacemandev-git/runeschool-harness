@@ -52,7 +52,7 @@ describe('director tools and loop', () => {
     const tools = createHarnessTools({ view: runtimeView, commands: runtimeCommands, async createTeam() {}, watchUrl: () => undefined }, bus, mailboxes);
     await tools.find((tool) => tool.definition.name === 'spawn_agent')!.run({ spec: { id: 'scout' } });
     await tools.find((tool) => tool.definition.name === 'assign_goal')!.run({ agent: 'hero', goal: 'walk' });
-    expect(tools).toHaveLength(12);
+    expect(tools).toHaveLength(15);
     expect(await tools.find((tool) => tool.definition.name === 'ask_admin')!.run({ text: 'spawn goblins' })).toEqual({
       ok: true, note: 'the admin replies to your mailbox'
     });

@@ -9,6 +9,7 @@
  */
 import type { JsonValue } from '#protocol';
 import type { HarnessBus, HarnessEvent } from './bus.ts';
+import type { RecordingSummary } from './recording.ts';
 import type { LiveRuntimeCommands, RuntimeCommands, RuntimeView } from './runtime.ts';
 import type { RunId } from './types.ts';
 
@@ -26,14 +27,14 @@ export interface ControlDescriptor {
 
 export const CONTROL_VIEW_METHODS = [
   'agents', 'teams', 'agentSnapshot', 'agentReflexes', 'agentTranscript',
-  'directorTranscript', 'adminTranscript', 'coordinatorTranscript', 'usage', 'config'
+  'directorTranscript', 'adminTranscript', 'coordinatorTranscript', 'usage', 'recordings', 'config'
 ] as const;
 export type ControlViewMethod = (typeof CONTROL_VIEW_METHODS)[number];
 
 export const CONTROL_COMMAND_METHODS = [
   'directorSay', 'adminSay', 'agentSay', 'coordinatorSay', 'setAgentGoal',
   'pauseAgent', 'resumeAgent', 'agentCommand', 'spawnAgent', 'removeAgent',
-  'setModel', 'setAgentModel', 'createTeam', 'stop'
+  'setModel', 'setAgentModel', 'createTeam', 'startRecording', 'stopRecording', 'stop'
 ] as const;
 export type ControlCommandMethod = (typeof CONTROL_COMMAND_METHODS)[number];
 
@@ -45,6 +46,7 @@ export interface ControlSnapshot {
   readonly agents: ReturnType<RuntimeView['agents']>;
   readonly teams: ReturnType<RuntimeView['teams']>;
   readonly usage: ReturnType<RuntimeView['usage']>;
+  readonly recordings?: readonly RecordingSummary[];
   readonly config: JsonValue;
 }
 

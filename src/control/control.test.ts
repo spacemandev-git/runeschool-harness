@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createBus } from '../bus/index.ts';
 import { CONTROL_COMMAND_METHODS } from '../core/control.ts';
+import type { RecordingRequest, RecordingSummary } from '../core/recording.ts';
 import type { ModelSelection, RuntimeView } from '../core/runtime.ts';
 import { createFakeRuntime } from '../tui/fake/fakeRuntime.ts';
 import { connectControl } from './client.ts';
@@ -39,6 +40,15 @@ describe('control server and client', () => {
       config: () => ({ fake: true, token: 'super-secret-token', nested: { api_key: 'another-secret' } }),
     };
     const controlCalls: string[] = [];
+    let recordings: readonly RecordingSummary[] = [];
+    const recordingRequest: RecordingRequest = {
+      resolution: { width: 1920, height: 1080 }, targets: [{ kind: 'overview' }],
+    };
+    const recordingSummary: RecordingSummary = {
+      id: 'overview', target: { kind: 'overview' }, resolution: recordingRequest.resolution,
+      state: 'recording', startedAt: 123,
+    };
+    const recordingView: RuntimeView = { ...view, recordings: () => recordings };
     const commands = {
       ...fake.commands,
       async removeAgent(agentId: string) { controlCalls.push(`remove:${agentId}`); return { removed: true }; },
@@ -48,14 +58,24 @@ describe('control server and client', () => {
       setAgentModel(agentId: string, role: string, spec: { model?: string }) {
         controlCalls.push(`model:${agentId}:${role}:${spec.model ?? ''}`);
       },
-      async createTeam(id: string) { controlCalls.push(`team:${id}`); }
+      async createTeam(id: string) { controlCalls.push(`team:${id}`); },
+      async startRecording(request: RecordingRequest) {
+        controlCalls.push(`record:${request.resolution.width}`);
+        recordings = [recordingSummary];
+        return recordings;
+      },
+      async stopRecording(id?: string) {
+        controlCalls.push(`stop-record:${id ?? 'all'}`);
+        recordings = recordings.map((summary) => ({ ...summary, state: 'done' as const, endedAt: 456 }));
+        return recordings;
+      },
     };
     serverBus.emit('log', { level: 'info', scope: 'test', message: 'retained history' });
     const server = await createControlServer({
       runId: fake.view.runId,
       logDir,
       mcpUrl: 'http://127.0.0.1:7780/mcp?token=url-secret',
-      view,
+      view: recordingView,
       commands,
       bus: serverBus,
     });
@@ -96,9 +116,15 @@ describe('control server and client', () => {
         await client.commands.setModel({ role: 'coordinator', team: 'alpha', model: 'team-model' });
         client.commands.setAgentModel!('hero', 'agent', { model: 'rival' });
         await client.commands.createTeam!('red', 'win', ['hero']);
-        await waitFor(() => controlCalls.length === 4);
+        expect(await client.commands.startRecording(recordingRequest)).toEqual([recordingSummary]);
+        await waitFor(() => client.view.recordings?.()[0]?.state === 'recording');
+        expect(client.view.recordings?.()).toEqual([recordingSummary]);
+        expect((await client.commands.stopRecording('overview'))[0]?.state).toBe('done');
+        await waitFor(() => client.view.recordings?.()[0]?.state === 'done');
+        await waitFor(() => controlCalls.length === 6);
         expect(controlCalls).toEqual([
-          'remove:hero', 'selection:coordinator:team-model', 'model:hero:agent:rival', 'team:red'
+          'remove:hero', 'selection:coordinator:team-model', 'model:hero:agent:rival', 'team:red',
+          'record:1920', 'stop-record:overview',
         ]);
       } finally {
         await client.close();
@@ -129,7 +155,7 @@ describe('control server and client', () => {
 
   test('control allow-list includes dynamic agent and team operations', () => {
     expect(CONTROL_COMMAND_METHODS).toEqual(expect.arrayContaining([
-      'removeAgent', 'setModel', 'setAgentModel', 'createTeam'
+      'removeAgent', 'setModel', 'setAgentModel', 'createTeam', 'startRecording', 'stopRecording'
     ]));
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createBus } from '../bus/index.ts';
-import type { ModelConfig, ModelProvider, RunConfig } from '../core/index.ts';
+import type { ModelConfig, ModelProvider, RecordingSummary, RunConfig } from '../core/index.ts';
 import { createMockProvider } from '../models/mock.ts';
 import { createModelRegistry } from '../models/registry.ts';
 import type { AgentRuntime } from './agentRuntime.ts';
@@ -18,7 +18,10 @@ function runConfig(): RunConfig {
   return {
     runId: 'run-view', mcpUrl: 'http://mcp.test', uiUrl: 'http://ui.test',
     world: { kind: 'resume', worldId: 'world-1' }, agents: [{ id: 'alice' }],
-    headless: false, logDir: './runs', dataDir: './data'
+    headless: false, logDir: './runs', dataDir: './data',
+    recording: {
+      resolution: { width: 1920, height: 1080 }, targets: [{ kind: 'overview' }],
+    },
   };
 }
 
@@ -34,6 +37,11 @@ function setup() {
   const teams: readonly RuntimeTeamRecord[] = [{
     id: 'red', mission: 'test the runtime surface', agents: ['alice']
   }];
+  const recordings: RecordingSummary[] = [{
+    id: 'overview', target: { kind: 'overview' }, resolution: { width: 1920, height: 1080 },
+    state: 'recording', startedAt: 101,
+  }];
+  const recordingCalls: string[] = [];
   const state: RuntimeSurfaceState = {
     config: runConfig(), startedAt: 100, models,
     agents: () => agents, teams: () => teams,
@@ -41,9 +49,12 @@ function setup() {
     watchUrl: () => undefined,
     async spawnAgent() {}, async removeAgent() { return { removed: false }; },
     async createTeam() {}, async stop() {}, async directorSay() {}, async adminSay() {},
-    async coordinatorSay() {}, async agentSay() {}
+    async coordinatorSay() {}, async agentSay() {},
+    recordings: () => recordings,
+    async startRecording(request) { recordingCalls.push(`start:${request.resolution.width}`); return recordings; },
+    async stopRecording(id) { recordingCalls.push(`stop:${id ?? 'all'}`); return recordings; },
   };
-  return { models, ...createRuntimeSurface(state) };
+  return { models, recordings, recordingCalls, ...createRuntimeSurface(state) };
 }
 
 describe('runtime surface model selection', () => {
@@ -65,6 +76,9 @@ describe('runtime surface model selection', () => {
     models.setOverride('red', 'coordinator', { model: 'red-model' });
 
     expect(view.config()).toMatchObject({
+      recording: {
+        resolution: { width: 1920, height: 1080 }, targets: [{ kind: 'overview' }],
+      },
       models: {
         director: 'base-model',
         admin: 'base-model',
@@ -73,5 +87,16 @@ describe('runtime surface model selection', () => {
         agents: { alice: 'alice-model' }
       }
     });
+  });
+
+  test('exposes recording summaries and delegates recording commands', async () => {
+    const { commands, recordingCalls, recordings, view } = setup();
+
+    expect(view.recordings?.()).toEqual(recordings);
+    expect(await commands.startRecording({
+      resolution: { width: 1920, height: 1080 }, targets: [{ kind: 'overview' }],
+    })).toEqual(recordings);
+    expect(await commands.stopRecording('overview')).toEqual(recordings);
+    expect(recordingCalls).toEqual(['start:1920', 'stop:overview']);
   });
 });

@@ -10,6 +10,7 @@ import type {
   ControlViewMethod,
 } from '../core/control.ts';
 import type { HarnessEvent, HarnessEventType } from '../core/bus.ts';
+import type { RecordingSummary } from '../core/recording.ts';
 import type { LiveRuntimeCommands, RuntimeView } from '../core/runtime.ts';
 
 const CONNECT_TIMEOUT_MS = 5_000;
@@ -203,6 +204,7 @@ export async function connectControl(
     adminTranscript() { return cached('adminTranscript', []) as ReturnType<RuntimeView['adminTranscript']>; },
     coordinatorTranscript(team) { return cached('coordinatorTranscript', [team]) as ReturnType<RuntimeView['coordinatorTranscript']>; },
     usage() { return latestSnapshot?.usage ?? []; },
+    recordings() { return latestSnapshot?.recordings ?? []; },
     config() { return latestSnapshot?.config ?? null; },
   };
 
@@ -223,6 +225,13 @@ export async function connectControl(
       return await command('agentCommand', [agentId, type, data as JsonValue]);
     },
     async spawnAgent(spec) { await command('spawnAgent', [spec as unknown as JsonValue]); },
+    async startRecording(recordingRequest) {
+      return await command('startRecording', [recordingRequest as unknown as JsonValue]) as unknown as readonly RecordingSummary[];
+    },
+    async stopRecording(id) {
+      const args: JsonValue[] = id === undefined ? [] : [id];
+      return await command('stopRecording', args) as unknown as readonly RecordingSummary[];
+    },
     async removeAgent(agentId, reason) {
       const args: JsonValue[] = [agentId];
       if (reason !== undefined) args.push(reason);

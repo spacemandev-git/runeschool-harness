@@ -95,6 +95,8 @@ function harness() {
       setModel(selection) { modelSelections.push(selection); },
       setAgentModel() {},
       async createTeam() {},
+      async startRecording() { return []; },
+      async stopRecording() { return []; },
       async stop(reason) {
         stopReasons.push(reason);
         resolveStopped({ reason });

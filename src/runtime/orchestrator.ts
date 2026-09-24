@@ -3,15 +3,17 @@ import type { JsonValue } from '#protocol';
 import type {
   Admin, AdminFactory, AgentHandle, AgentIdentityStore, AgentSpec, ChatMessage, DefsReader,
   HarnessBus, HostedWorldClient, McpSession, MemoryStoreFactory, MindFactory, ModelRegistry, PromptLibrary,
-  ProvisionedWorld, RunConfig, LiveRuntimeCommands, RuntimeView, TeamId
+  ProvisionedWorld, Recorder, RunConfig, LiveRuntimeCommands, RuntimeView, TeamId
 } from '../core/index.ts';
 import { createCoordinator, createDirector, type Coordinator, type Director } from '../director/index.ts';
+import { createPlaywrightRecorder } from '../recording/index.ts';
 import { createDefsReader, createMcpSession, serverBaseUrlOf } from '../transport/index.ts';
 import { createAgentIdentityStore } from '../transport/agentIdentity.ts';
 import { createHostedWorldClient } from '../transport/hostedWorld.ts';
 import { createAgentRuntime, type AgentRuntime } from './agentRuntime.ts';
 import { agentPlayerRequest, provisionHostedWorld, resolveAgentCredentials } from './credentials.ts';
 import { createMailboxes } from './mailbox.ts';
+import { createRecordingController } from './recording.ts';
 import { createJsonlTrace } from './trace.ts';
 import { createRuntimeSurface, type RuntimeTeamRecord } from './view.ts';
 
@@ -33,6 +35,7 @@ export interface HarnessRuntimeDeps {
   readonly mcp?: McpSession;
   readonly hostedWorld?: HostedWorldClient;
   readonly identities?: AgentIdentityStore;
+  readonly recorder?: Recorder;
   readonly now?: () => number;
 }
 
@@ -101,6 +104,21 @@ export function createHarnessRuntime(config: RunConfig, deps: HarnessRuntimeDeps
   const stopped = new Promise<{ reason: string }>((resolve) => { stopResolve = resolve; });
   const unregister: (() => void)[] = [];
   const removingAgents = new Set<string>();
+  let recorder = deps.recorder;
+  const recording = createRecordingController({
+    recorder: () => recorder ??= createPlaywrightRecorder(),
+    bus: deps.bus,
+    runId: config.runId,
+    uiUrl: config.uiUrl,
+    logDir: config.logDir,
+    now,
+    world: () => world,
+    agents: () => agentRuntimes.map((agent) => ({
+      id: agent.id,
+      entity: agent.entity,
+      displayName: agent.spec.displayName ?? agent.id,
+    })),
+  });
 
   const canMessage = (from: string, to: string): boolean => {
     if (config.channels !== 'team-only') return true;
@@ -160,6 +178,7 @@ export function createHarnessRuntime(config: RunConfig, deps: HarnessRuntimeDeps
       ...(spec.privateGoal === true || spec.goal === undefined ? {} : { goal: spec.goal })
     });
     await runtime.start();
+    await recording.onAgentSpawned(spec.id);
   }
 
   async function removeAgent(agentId: string, reason?: string): Promise<{ readonly removed: boolean }> {
@@ -203,6 +222,7 @@ export function createHarnessRuntime(config: RunConfig, deps: HarnessRuntimeDeps
 
   async function stop(reason: string): Promise<void> {
     stopping ??= (async () => {
+      await recording.close();
       for (const cleanup of unregister.splice(0)) cleanup();
       director?.dispose();
       admin?.dispose();
@@ -224,6 +244,9 @@ export function createHarnessRuntime(config: RunConfig, deps: HarnessRuntimeDeps
   surface = createRuntimeSurface({
     config, startedAt, models: traced.models, agents: () => agentRuntimes, teams: () => teamRecords,
     director: () => director, admin: () => admin, world: () => world, watchUrl, spawnAgent, removeAgent, createTeam, stop,
+    recordings: () => recording.list(),
+    startRecording: (request) => recording.start(request),
+    stopRecording: (id) => recording.stop(id),
     async directorSay(text) {
       if (director === undefined) throw new Error('Director is not started');
       await director.say(text);
@@ -295,6 +318,17 @@ export function createHarnessRuntime(config: RunConfig, deps: HarnessRuntimeDeps
           await spawnAgent(declaredTeam === undefined || spec.team !== undefined ? spec : { ...spec, team: declaredTeam });
         }
         for (const team of config.teams ?? []) await createTeam(team.id, team.mission, team.agents);
+        if (config.recording !== undefined) {
+          try {
+            await recording.start(config.recording);
+          } catch (error) {
+            deps.bus.emit('log', {
+              level: 'error',
+              scope: 'recording',
+              message: `Automatic recording failed: ${error instanceof Error ? error.message : String(error)}`,
+            });
+          }
+        }
         director = createDirector({
           runtime: {
             view: surface.view, commands: surface.commands, createTeam,

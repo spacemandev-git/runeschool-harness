@@ -30,6 +30,7 @@ createHarnessRuntime (orchestrator)
       │       └── reflex engine ───┘
       │
       ├── director + admin + team coordinators <──> mailboxes
+      ├── recording controller ──> Playwright recorder ──> chromeless spectator route
       ├── RuntimeView / LiveRuntimeCommands <──> cockpit or control client
       └── event bus ──> cockpit, control stream, JSONL trace
 ```
@@ -88,8 +89,9 @@ retaining supervisor routes.
 `RuntimeView` is the read surface consumed by the cockpit and control clients. It exposes agent and
 team summaries, transcripts, snapshots, usage, the active instance, and a redacted configuration.
 `LiveRuntimeCommands` provides chat, goal and pause controls, raw allow-listed actor commands,
-dynamic agent/team operations, model selection, and graceful shutdown. The config view includes
-the resolved director, admin, default-agent, coordinator, and per-agent model assignments.
+dynamic agent/team operations, spectator recording controls, model selection, and graceful
+shutdown. The config view includes the resolved director, admin, default-agent, coordinator, and
+per-agent model assignments.
 
 ## Control and observability
 
@@ -98,6 +100,38 @@ CLI runs serve a local Unix-socket control plane by default. Its owner-only desc
 replayed bus events, live events, and the allow-listed command surface. Socket traffic and config
 views are redacted before transmission. The control plane is local and unauthenticated, so its
 descriptor directory and socket must remain private to one trusted machine account.
+
+The control snapshot includes `RuntimeView.recordings()`, and the allow-listed command surface
+round-trips `startRecording` and `stopRecording`. This gives both the in-process cockpit and a
+cockpit or director attached through the Unix socket the same current and finished camera state.
+
+## Spectator recording
+
+Recording begins only after the world and initial agents are provisioned. The runtime recording
+controller expands overview and agent targets, follows later agent spawns when requested, and owns
+the session timer and shutdown ordering. Its data path is:
+
+```text
+runtime recording controller
+      │
+      v
+Playwright recorder ──> /#/record/<instanceId> chromeless spectator route
+      │
+      v
+exact-size 25 fps VP8 WebM ──> ffmpeg H.264 (-crf 18) ──> MP4 + recording.json
+```
+
+The recorder emits `recording.started` when each camera becomes ready and `recording.finished`
+after finalization or failure. Those events flow through the ordinary bus to the cockpit, control
+stream, and redacted JSONL trace. Recording failures are reported without aborting the run, and
+runtime shutdown closes recording before agent transports so the final frames can be captured.
+Only one pixel resolution is active per session; same-resolution requests add new cameras, while a
+different resolution requires stopping the session first.
+
+The browser navigates only to the configured public spectator UI origin and the instance server's
+unauthenticated read endpoints. Actor tokens, admin tokens, API keys, and MCP session identifiers
+are never passed into browser state, recording manifests, or recording events. Default outputs live
+under `runs/recordings/<runId>/`, inside the repository's gitignored `runs` directory.
 
 Every module emits JSON-serialisable events onto the shared bus. A per-run JSONL trace subscribes
 to that bus, recursively redacts credential-shaped fields, URLs, bearer values, and known secret
@@ -112,6 +146,7 @@ environment values, and creates its file with mode `0600`. Model request content
 | `src/transport/` | MCP lifecycle/provisioning, hosted-world sign-in/join, identity storage, actor WebSocket and HTTP transport, definitions reader |
 | `src/perception/` | SDK world-model wrapper, event/outcome folding, snapshot differencing, visibility, summaries |
 | `src/runtime/` | Orchestrator, credential resolution, per-agent runtime, runtime view/commands, mailboxes, reads, tracing |
+| `src/recording/` | Headless Playwright spectator cameras, manifests, WebM capture, and MP4 transcoding |
 | `src/admin/` | Game-master persona, MCP tool filtering, name resolution, and token-safe reporting |
 | `src/mind/` | Agent turns, tools, wake policy, prompt construction, compaction, salience |
 | `src/reflex/` | Declarative DSL, engine, presets, rule actions, magic tables, and built-in behaviours |
